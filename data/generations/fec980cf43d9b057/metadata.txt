@@ -1,0 +1,7 @@
+Prompt Hash: fec980cf43d9b057
+Timestamp: 2025-10-16T15:58:34.722167
+Prompt: Side view of a catapult on a plain green field launching a rock
+
+Metadata:
+  num_takes: 1
+  mode: MOCK

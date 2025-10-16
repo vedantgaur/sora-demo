@@ -32,10 +32,8 @@ ENV/
 *.swo
 *~
 
-# Generated Data (but keep samples)
-data/generations/
+# Generated Data (but keep demos and cache)
 data/reconstructions/
-data/cache/
 logs/
 *.splat
 *.ply
@@ -44,6 +42,22 @@ logs/
 # Keep sample files for demo
 !data/samples/
 !data/samples/*.mp4
+
+# Keep demo cache files (shared across all users)
+!data/cache/
+!data/cache/*.json
+
+# Keep specific demo Sora-generated videos (shared across all users)
+!data/generations/
+!data/generations/796b6b5a7803e5aa/
+!data/generations/796b6b5a7803e5aa/*.mp4
+!data/generations/fec980cf43d9b057/
+!data/generations/fec980cf43d9b057/*.mp4
+
+# Ignore other user-generated videos (not committed)
+data/generations/*
+!data/generations/796b6b5a7803e5aa/
+!data/generations/fec980cf43d9b057/
 
 # Environment Variables
 .env

@@ -1,0 +1,23 @@
+{
+  "prompt_hash": "2afd2fb4c6831ea0",
+  "prompt": "Two people on a flat green lawn playing catch, side view, both people on either side",
+  "takes": [
+    {
+      "take_id": 1,
+      "video_url": "/data/generations/2afd2fb4c6831ea0/take_1.mp4",
+      "video_path": "/Users/vedantgaur/Downloads/Projects/sora-demo/data/generations/2afd2fb4c6831ea0/take_1.mp4",
+      "scores": {
+        "identity_persistence": 0.9629887106718796,
+        "path_realism": 0.8866707016973181,
+        "physics_plausibility": 0.8749204427961202,
+        "visual_quality": 0.9140647036422904,
+        "motion_smoothness": 0.9422065640346906,
+        "temporal_coherence": 0.8763219952180157,
+        "overall": 0.9120279680382718
+      },
+      "rank": 1
+    }
+  ],
+  "mode": "REAL",
+  "success": true
+}

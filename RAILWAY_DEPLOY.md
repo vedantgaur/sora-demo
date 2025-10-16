@@ -50,6 +50,25 @@ Railway will automatically:
 
 ---
 
+## 📦 Pre-Cached Demo Videos
+
+Your deployment includes **3 pre-loaded Sora videos** (~5.2MB total):
+
+1. **Cube Animation** - `data/samples/demo.mp4` (14KB) - Local test
+2. **Man Walking Through Trees** - `data/generations/796b6b5a7803e5aa/take_1.mp4` (3.4MB)
+3. **Catapult Launching** - `data/generations/fec980cf43d9b057/take_1.mp4` (1.8MB)
+
+**All users will see these in the "Or load cached..." dropdown immediately!**
+
+### Caching Behavior:
+- ✅ Pre-committed videos persist across deployments
+- ✅ Users share cache during a deployment session
+- ⚠️ New user-generated videos are **ephemeral** (lost on redeploy)
+
+**For permanent caching**: Add a Railway Volume (see CACHING_GUIDE.md)
+
+---
+
 ## 🔧 Configuration Details
 
 ### Procfile

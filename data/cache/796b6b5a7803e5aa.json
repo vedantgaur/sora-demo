@@ -1,0 +1,24 @@
+{
+  "prompt_hash": "796b6b5a7803e5aa",
+  "prompt": "A man walking through trees",
+  "takes": [
+    {
+      "take_id": 1,
+      "video_url": "/data/generations/796b6b5a7803e5aa/take_1.mp4",
+      "video_path": "/Users/vedantgaur/Downloads/Projects/sora-demo/data/generations/796b6b5a7803e5aa/take_1.mp4",
+      "scores": {
+        "identity_persistence": 0.95,
+        "path_realism": 0.92,
+        "physics_plausibility": 0.88,
+        "visual_quality": 0.96,
+        "motion_smoothness": 0.94,
+        "temporal_coherence": 0.91,
+        "overall": 0.93
+      },
+      "rank": 1
+    }
+  ],
+  "mode": "REAL",
+  "success": true
+}
+

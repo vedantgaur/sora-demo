@@ -1,0 +1,7 @@
+Prompt Hash: 796b6b5a7803e5aa
+Timestamp: 2025-10-16T14:57:16.646895
+Prompt: Person walking through trees
+
+Metadata:
+  num_takes: 1
+  mode: MOCK

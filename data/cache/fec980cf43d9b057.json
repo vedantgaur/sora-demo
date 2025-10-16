@@ -1,0 +1,24 @@
+{
+  "prompt_hash": "fec980cf43d9b057",
+  "prompt": "A medieval catapult launching a projectile in a slow-motion shot",
+  "takes": [
+    {
+      "take_id": 1,
+      "video_url": "/data/generations/fec980cf43d9b057/take_1.mp4",
+      "video_path": "/Users/vedantgaur/Downloads/Projects/sora-demo/data/generations/fec980cf43d9b057/take_1.mp4",
+      "scores": {
+        "identity_persistence": 0.97,
+        "path_realism": 0.89,
+        "physics_plausibility": 0.91,
+        "visual_quality": 0.94,
+        "motion_smoothness": 0.92,
+        "temporal_coherence": 0.90,
+        "overall": 0.92
+      },
+      "rank": 1
+    }
+  ],
+  "mode": "REAL",
+  "success": true
+}
+
