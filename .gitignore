@@ -32,12 +32,18 @@ ENV/
 *.swo
 *~
 
-# Generated Data
-data/
-*.mp4
+# Generated Data (but keep samples)
+data/generations/
+data/reconstructions/
+data/cache/
+logs/
 *.splat
 *.ply
 *.glb
+
+# Keep sample files for demo
+!data/samples/
+!data/samples/*.mp4
 
 # Environment Variables
 .env
