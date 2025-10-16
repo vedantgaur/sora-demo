@@ -18,16 +18,18 @@ logger = setup_logger(__name__)
 class SoraHandler:
     """Handles video generation via Sora API or mock implementation."""
     
-    def __init__(self, use_mock: bool = None):
+    def __init__(self, use_mock: bool = None, progress_callback=None):
         """
         Initialize the Sora handler.
         
         Args:
             use_mock: Override config to use mock mode (default: from Config)
+            progress_callback: Optional callback function(status, progress, message) for progress updates
         """
         self.use_mock = use_mock if use_mock is not None else Config.USE_MOCK
         self.api_key = Config.SORA_API_KEY
         self.api_url = Config.SORA_API_URL
+        self.progress_callback = progress_callback
         
         if not self.use_mock and not self.api_key:
             logger.warning("Sora API key not set, falling back to mock mode")
@@ -184,6 +186,14 @@ class SoraHandler:
                 video = client.videos.retrieve(video.id)
                 progress = getattr(video, "progress", 0)
                 logger.info(f"Video generation progress: {progress}% (status: {video.status})")
+                
+                # Call progress callback if provided
+                if self.progress_callback:
+                    self.progress_callback(
+                        status=video.status,
+                        progress=progress,
+                        message=f"Generating video: {progress}%"
+                    )
             
             if video.status == "failed":
                 error_msg = getattr(getattr(video, "error", None), "message", "Unknown error")

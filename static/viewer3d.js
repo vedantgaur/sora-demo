@@ -25,6 +25,9 @@ class Viewer3D {
         this.scene.background = new THREE.Color(0x1a1a1a);
         this.scene.fog = new THREE.Fog(0x1a1a1a, 10, 50);
         
+        // Clock for animations
+        this.clock = new THREE.Clock();
+        
         // Get parent dimensions for proper sizing
         const parent = this.canvas.parentElement;
         const width = parent.clientWidth || 800;
@@ -136,20 +139,39 @@ class Viewer3D {
     }
     
     executeGeneratedCode(code) {
-        // Clear existing world
-        if (this.world) {
-            this.scene.remove(this.world);
+        try {
+            // Store the code for re-execution (for animations)
+            this.generatedSceneCode = code;
+            this.generatedSceneFunction = new Function('THREE', code);
+            
+            // Execute once to create initial scene
+            this.updateGeneratedScene();
+            
+            console.log('Successfully executed GPT-generated scene code');
+            
+        } catch (error) {
+            console.error('Failed to execute generated code:', error);
+            console.error('Code was:', code);
+            // Fall back to demo world
+            this.createDemoWorld();
         }
-        
-        this.world = new THREE.Group();
+    }
+    
+    updateGeneratedScene() {
+        // Re-execute generated code every frame for animations
+        if (!this.generatedSceneFunction) return;
         
         try {
-            // Create a safe execution context
-            const THREE = window.THREE;
+            // Clear existing world
+            if (this.world) {
+                this.scene.remove(this.world);
+            }
             
-            // Execute the generated code
-            const createScene = new Function('THREE', code);
-            const objects = createScene(THREE);
+            this.world = new THREE.Group();
+            
+            // Execute the generated code with current context
+            const THREE = window.THREE;
+            const objects = this.generatedSceneFunction.call(this, THREE);
             
             // Add objects to world
             if (Array.isArray(objects)) {
@@ -163,13 +185,11 @@ class Viewer3D {
             }
             
             this.scene.add(this.world);
-            console.log('Successfully executed GPT-generated scene code');
             
         } catch (error) {
-            console.error('Failed to execute generated code:', error);
-            console.error('Code was:', code);
-            // Fall back to demo world
-            this.createDemoWorld();
+            console.error('Failed to update generated scene:', error);
+            // Stop trying to update if it keeps failing
+            this.generatedSceneFunction = null;
         }
     }
     
@@ -233,6 +253,9 @@ class Viewer3D {
     }
     
     createDemoWorld() {
+        // Clear generated scene function (static world, no animations)
+        this.generatedSceneFunction = null;
+        
         // Clear existing world
         if (this.world) {
             this.scene.remove(this.world);
@@ -362,6 +385,9 @@ class Viewer3D {
         
         // Update controls
         this.controls.update();
+        
+        // Update generated scene (for animations)
+        this.updateGeneratedScene();
         
         // Update agent animation
         this.updateAgentAnimation();

@@ -40,6 +40,10 @@ CORS(app)
 # Initialize logger
 logger = setup_logger(__name__)
 
+# Global progress tracking for video generations
+# Format: {prompt_hash: {'status': 'queued|in_progress|completed|failed', 'progress': 0-100, 'message': '...'}}
+generation_progress = {}
+
 # Initialize modules
 sora_handler = get_sora_handler()
 video_scorer = get_video_scorer()
@@ -62,6 +66,28 @@ def health():
         'mode': 'MOCK' if Config.USE_MOCK else 'PRODUCTION',
         'version': '1.0.0'
     })
+
+
+@app.route('/api/progress/<prompt_hash>')
+def get_progress(prompt_hash):
+    """
+    Get generation progress for a specific prompt hash.
+    
+    Response JSON:
+        {
+            "status": "queued|in_progress|completed|failed",
+            "progress": 0-100,
+            "message": "Status message"
+        }
+    """
+    if prompt_hash in generation_progress:
+        return jsonify(generation_progress[prompt_hash])
+    else:
+        return jsonify({
+            'status': 'not_found',
+            'progress': 0,
+            'message': 'Generation not found'
+        }), 404
 
 
 @app.route('/api/generate', methods=['POST'])
@@ -104,6 +130,13 @@ def generate_videos():
         # Generate unique hash for this prompt
         prompt_hash = generate_prompt_hash(prompt)
         
+        # Initialize progress tracking
+        generation_progress[prompt_hash] = {
+            'status': 'queued',
+            'progress': 0,
+            'message': 'Initializing generation...'
+        }
+        
         # Create output directory
         output_dir = create_generation_directory(prompt_hash)
         
@@ -113,10 +146,26 @@ def generate_videos():
             'mode': 'MOCK' if Config.USE_MOCK else 'PRODUCTION'
         })
         
+        # Update progress
+        generation_progress[prompt_hash] = {
+            'status': 'in_progress',
+            'progress': 10,
+            'message': 'Starting video generation...'
+        }
+        
         # Generate videos (use specific handler for real/mock mode)
         if use_real_api:
             from src.sora_handler import SoraHandler
-            temp_handler = SoraHandler(use_mock=False)
+            
+            # Create progress callback
+            def update_progress(status, progress, message):
+                generation_progress[prompt_hash] = {
+                    'status': status,
+                    'progress': progress,
+                    'message': message
+                }
+            
+            temp_handler = SoraHandler(use_mock=False, progress_callback=update_progress)
             video_paths = temp_handler.generate_n_takes(
                 prompt=prompt,
                 num_takes=num_takes,
@@ -128,6 +177,12 @@ def generate_videos():
                 num_takes=num_takes,
                 output_dir=output_dir
             )
+            # Mock mode completes instantly
+            generation_progress[prompt_hash] = {
+                'status': 'in_progress',
+                'progress': 90,
+                'message': 'Scoring videos...'
+            }
         
         # Score each video
         takes = []
@@ -157,6 +212,13 @@ def generate_videos():
             if first_video.exists() and first_video.stat().st_size < 100000:  # Less than 100KB is likely mock
                 actual_mode = 'MOCK'
         
+        # Mark generation as completed
+        generation_progress[prompt_hash] = {
+            'status': 'completed',
+            'progress': 100,
+            'message': 'Generation complete!'
+        }
+        
         response = {
             'prompt_hash': prompt_hash,
             'prompt': prompt,
@@ -169,6 +231,15 @@ def generate_videos():
         return jsonify(response)
     
     except Exception as e:
+        # Mark generation as failed
+        prompt_hash = locals().get('prompt_hash')
+        if prompt_hash:
+            generation_progress[prompt_hash] = {
+                'status': 'failed',
+                'progress': 0,
+                'message': f'Generation failed: {str(e)}'
+            }
+        
         logger.error(f"Error in generate_videos: {e}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e), 'success': False}), 500
@@ -200,16 +271,16 @@ def reconstruct_3d():
         if not prompt_hash or not video_path_str:
             return jsonify({'error': 'prompt_hash and video_path are required'}), 400
         
-        # Handle web URL paths (e.g., /data/samples/demo.mp4)
-        # Convert to filesystem path
-        if video_path_str.startswith('/'):
-            # This is a web URL path, strip leading slash and resolve relative to project root
-            video_path_str = video_path_str.lstrip('/')
-            video_path = Config.DATA_ROOT.parent / video_path_str
+        # Handle different path formats
+        # Check for web URL paths FIRST (before absolute path check)
+        if video_path_str.startswith('/data/'):
+            # Web URL path - strip leading slash and resolve relative to project root
+            video_path = Config.DATA_ROOT.parent / video_path_str.lstrip('/')
         else:
-            # Already a filesystem path
             video_path = Path(video_path_str)
+            # If it's already an absolute path, use it as-is
             if not video_path.is_absolute():
+                # Relative path, resolve relative to project root
                 video_path = Config.DATA_ROOT.parent / video_path_str
         
         if not video_path.exists():
@@ -483,31 +554,56 @@ def generate_scene():
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a 3D scene reconstruction expert. Analyze the video frames and generate Three.js code to recreate the scene.
+                    "content": """You are a 3D scene reconstruction expert. Analyze the video frames and generate THREE.JS CODE with ANIMATIONS to recreate the scene.
+
+CRITICAL REQUIREMENTS:
+1. Include ALL objects/characters from the video (people, animals, vehicles, etc.)
+2. Create ANIMATED movement for any moving objects
+3. Use this.clock for animations (available in the viewer)
+4. Make the scene DYNAMIC and ALIVE, not static
 
 Your response must be ONLY valid JSON in this exact format:
 {
-  "analysis": "Brief description of the scene, environment, objects, and movement",
-  "code": "Complete Three.js code that creates the scene. Use THREE.BoxGeometry, THREE.SphereGeometry, THREE.CylinderGeometry, THREE.PlaneGeometry. Include ground plane, objects, lighting. Return as string with \\n for newlines."
+  "analysis": "Brief description of the scene, ALL objects/characters, and their movement",
+  "code": "Complete Three.js code with ANIMATIONS. Return as string with \\n for newlines."
 }
 
-The code should:
-1. Create geometries and materials
-2. Position objects based on the video
-3. Add appropriate colors and scales
-4. Return an array of meshes to add to scene
-5. Use realistic positions (y=0 is ground)
+The code MUST:
+1. Include ALL elements visible in frames (people, trees, ground, sky, etc.)
+2. Use appropriate geometries: BoxGeometry (people/buildings), SphereGeometry (balls/heads), CylinderGeometry (trees/columns), PlaneGeometry (ground/walls)
+3. CREATE ANIMATIONS using this.clock.getElapsedTime() for moving objects
+4. Position objects realistically (y=0 is ground, people should be ~1.8 units tall)
+5. Return an array of meshes
 
-Example code structure:
+CODE TEMPLATE:
 const objects = [];
-// Ground
+const time = this.clock.getElapsedTime();
+
+// GROUND (always include)
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshStandardMaterial({ color: 0x228B22 })
+  new THREE.PlaneGeometry(30, 30),
+  new THREE.MeshStandardMaterial({ color: 0x8B7355 })
 );
 ground.rotation.x = -Math.PI / 2;
 objects.push(ground);
-// Add more objects...
+
+// MOVING CHARACTER (if person/animal in video)
+const person = new THREE.Group();
+const body = new THREE.Mesh(
+  new THREE.BoxGeometry(0.5, 1.5, 0.3),
+  new THREE.MeshStandardMaterial({ color: 0x333333 })
+);
+body.position.y = 0.75;
+person.add(body);
+// ANIMATE: move person over time
+person.position.x = -5 + (time * 0.5) % 10;
+person.position.z = 0;
+objects.push(person);
+
+// OTHER OBJECTS (trees, buildings, etc.)
+// Use CylinderGeometry for tree trunks, SphereGeometry for foliage
+// Add multiple objects if scene has them
+
 return objects;"""
                 },
                 {

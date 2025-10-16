@@ -182,6 +182,20 @@ body {
     margin-bottom: 20px;
 }
 
+.video-source-option:hover {
+    background: rgba(255,255,255,0.08) !important;
+    border-color: rgba(255,255,255,0.2) !important;
+}
+
+.video-source-option input[type="radio"]:checked + span {
+    font-weight: 600;
+}
+
+.video-source-option:has(input[type="radio"]:checked) {
+    background: rgba(255,255,255,0.1) !important;
+    border-color: #fafafa !important;
+}
+
 label {
     display: block;
     font-weight: 500;

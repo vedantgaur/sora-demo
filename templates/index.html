@@ -43,6 +43,22 @@
                     <div class="prompt-hints" id="promptHints"></div>
                 </div>
                 
+                <!-- Mock Mode Video Selector -->
+                <div id="videoSourceSelector" class="form-group" style="display: none;">
+                    <label style="color: #e4e4e7; font-size: 14px; margin-bottom: 8px; display: block;">Test Video Source:</label>
+                    <div style="display: flex; gap: 12px;">
+                        <label class="video-source-option" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                            <input type="radio" name="videoSource" value="demo" checked style="margin-right: 8px;">
+                            <span style="color: #fafafa; font-size: 14px;">Demo (Cube Animation)</span>
+                        </label>
+                        <label class="video-source-option" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                            <input type="radio" name="videoSource" value="sora" style="margin-right: 8px;">
+                            <span style="color: #fafafa; font-size: 14px;">Sora Generated</span>
+                        </label>
+                    </div>
+                    <p style="color: #71717a; font-size: 12px; margin-top: 8px;">Choose a video source to test 3D reconstruction</p>
+                </div>
+                
                 <button id="generateBtn" class="btn btn-primary btn-large">
                     <span class="btn-text">Show Video</span>
                     <span class="btn-loader" style="display: none;">Loading...</span>
@@ -51,6 +67,18 @@
 
             <!-- Results Container -->
             <div id="resultsContainer" class="results-container" style="display: none;">
+                <!-- Progress Bar -->
+                <div id="progressContainer" style="display: none; margin-bottom: 24px; padding: 20px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span id="progressStatus" style="color: #a1a1aa; font-size: 14px; font-weight: 500;">Queued...</span>
+                        <span id="progressPercent" style="color: #fafafa; font-weight: 600; font-size: 16px;">0%</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.08); border-radius: 8px; height: 10px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
+                        <div id="progressBar" style="background: linear-gradient(90deg, #fafafa, #d4d4d8); height: 100%; width: 0%; transition: width 0.3s ease, background 0.3s ease;"></div>
+                    </div>
+                    <div id="progressMessage" style="margin-top: 8px; color: #71717a; font-size: 12px;"></div>
+                </div>
+                
                 <h3>Generated Video</h3>
                 <div id="results" class="video-grid"></div>
             </div>

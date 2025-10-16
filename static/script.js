@@ -35,12 +35,16 @@ function setupEventListeners() {
     const promptInput = document.getElementById('promptInput');
     const generateBtn = document.getElementById('generateBtn');
     const btnText = generateBtn.querySelector('.btn-text');
+    const videoSourceSelector = document.getElementById('videoSourceSelector');
     
     if (!useRealAPI) {
         promptInput.disabled = true;
         promptInput.style.opacity = '0.5';
-        promptInput.value = 'A cube moving left to right';
+        promptInput.value = 'A ball moving left to right';
         btnText.textContent = 'Show Video';
+        videoSourceSelector.style.display = 'block';  // Show video selector in mock mode
+    } else {
+        videoSourceSelector.style.display = 'none';  // Hide video selector in real mode
     }
     
     // Run agent button
@@ -48,6 +52,20 @@ function setupEventListeners() {
     
     // Regenerate button
     document.getElementById('regenerateBtn').addEventListener('click', handleRegenerate);
+    
+    // Video source selector (update prompt when changing)
+    document.querySelectorAll('input[name="videoSource"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (!useRealAPI) {
+                const promptInput = document.getElementById('promptInput');
+                if (e.target.value === 'sora') {
+                    promptInput.value = 'A man walking through trees';
+                } else {
+                    promptInput.value = 'A ball moving left to right';
+                }
+            }
+        });
+    });
     
     // Enter key in prompt input
     document.getElementById('promptInput').addEventListener('keydown', (e) => {
@@ -66,6 +84,7 @@ function handleModeToggle(event) {
     const promptInput = document.getElementById('promptInput');
     const generateBtn = document.getElementById('generateBtn');
     const btnText = generateBtn.querySelector('.btn-text');
+    const videoSourceSelector = document.getElementById('videoSourceSelector');
     
     if (useRealAPI) {
         modeLabel.textContent = 'REAL API MODE';
@@ -73,6 +92,7 @@ function handleModeToggle(event) {
         promptInput.disabled = false;
         promptInput.style.opacity = '1';
         btnText.textContent = 'Generate Video';
+        videoSourceSelector.style.display = 'none';  // Hide video selector
         
         // Warning for real API
         if (confirm('Warning: Real Sora API mode will make actual API calls.\n\nAre you sure you want to enable this?')) {
@@ -85,6 +105,7 @@ function handleModeToggle(event) {
             promptInput.disabled = true;
             promptInput.style.opacity = '0.5';
             btnText.textContent = 'Show Video';
+            videoSourceSelector.style.display = 'block';  // Show video selector
         }
     } else {
         modeLabel.textContent = 'MOCK MODE';
@@ -92,6 +113,7 @@ function handleModeToggle(event) {
         promptInput.disabled = true;
         promptInput.style.opacity = '0.5';
         btnText.textContent = 'Show Video';
+        videoSourceSelector.style.display = 'block';  // Show video selector
     }
 }
 
@@ -110,6 +132,94 @@ async function checkHealth() {
 }
 
 /**
+ * Generate SHA256 hash of prompt (matches backend implementation)
+ */
+async function generatePromptHash(prompt) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(prompt);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex.substring(0, 16);  // First 16 characters, like backend
+}
+
+/**
+ * Poll for generation progress
+ */
+async function pollProgress(promptHash, interval = 2000) {
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressStatus = document.getElementById('progressStatus');
+    const progressMessage = document.getElementById('progressMessage');
+    
+    // Show progress container
+    progressContainer.style.display = 'block';
+    
+    let pollCount = 0;
+    const maxPolls = 300; // Max 10 minutes (300 * 2 seconds)
+    
+    return new Promise((resolve, reject) => {
+        const pollInterval = setInterval(async () => {
+            try {
+                pollCount++;
+                
+                if (pollCount > maxPolls) {
+                    clearInterval(pollInterval);
+                    reject(new Error('Progress polling timed out'));
+                    return;
+                }
+                
+                const response = await fetch(`/api/progress/${promptHash}`);
+                
+                if (!response.ok) {
+                    clearInterval(pollInterval);
+                    reject(new Error('Failed to fetch progress'));
+                    return;
+                }
+                
+                const progress = await response.json();
+                
+                // Update UI
+                progressBar.style.width = `${progress.progress}%`;
+                progressPercent.textContent = `${progress.progress}%`;
+                progressStatus.textContent = progress.status === 'queued' ? 'Queued' : 
+                                            progress.status === 'in_progress' ? 'Generating' :
+                                            progress.status === 'completed' ? 'Complete' : 
+                                            progress.status === 'failed' ? 'Failed' : progress.status;
+                progressMessage.textContent = progress.message || '';
+                
+                // Update color based on status
+                if (progress.status === 'completed') {
+                    progressBar.style.background = 'linear-gradient(90deg, #4ade80, #22c55e)';
+                } else if (progress.status === 'failed') {
+                    progressBar.style.background = 'linear-gradient(90deg, #f87171, #ef4444)';
+                }
+                
+                // Stop polling if completed or failed
+                if (progress.status === 'completed' || progress.status === 'failed') {
+                    clearInterval(pollInterval);
+                    // Hide progress bar after a delay
+                    setTimeout(() => {
+                        progressContainer.style.display = 'none';
+                        progressBar.style.width = '0%';
+                        progressPercent.textContent = '0%';
+                        progressStatus.textContent = 'Queued...';
+                        progressMessage.textContent = '';
+                        progressBar.style.background = 'linear-gradient(90deg, #fafafa, #d4d4d8)';
+                    }, 2000);
+                    resolve(progress);
+                }
+            } catch (error) {
+                console.error('Progress polling error:', error);
+                clearInterval(pollInterval);
+                reject(error);
+            }
+        }, interval);
+    });
+}
+
+/**
  * Handle video generation
  */
 async function handleGenerate() {
@@ -118,22 +228,38 @@ async function handleGenerate() {
     
     const prompt = promptInput.value.trim();
     
-    // Mock mode: Just show sample video directly
+    // Mock mode: Just show selected video directly
     if (!useRealAPI) {
         setButtonLoading(generateBtn, true);
         hideSection('viewerSection');
         hideSection('agentResultsSection');
         
         try {
-            currentPrompt = 'A cube moving left to right';
-            currentPromptHash = 'sample';
+            // Get selected video source
+            const videoSource = document.querySelector('input[name="videoSource"]:checked')?.value || 'demo';
+            
+            let videoPath, videoPrompt;
+            
+            if (videoSource === 'sora') {
+                // Use the most recent Sora-generated video
+                videoPath = '/data/generations/796b6b5a7803e5aa/take_1.mp4';
+                videoPrompt = 'A man walking through trees';
+                currentPromptHash = '796b6b5a7803e5aa';
+            } else {
+                // Use demo video
+                videoPath = '/data/samples/demo.mp4';
+                videoPrompt = 'A ball moving left to right';
+                currentPromptHash = 'sample';
+            }
+            
+            currentPrompt = videoPrompt;
             
             // Add timestamp to bust browser cache
             const timestamp = Date.now();
             displayResults([{
-                take_id: 'sample',
-                video_path: '/data/samples/demo.mp4',
-                video_url: `/data/samples/demo.mp4?t=${timestamp}`,
+                take_id: currentPromptHash,
+                video_path: videoPath,
+                video_url: `${videoPath}?t=${timestamp}`,
                 rank: 1,
                 scores: {
                     overall: 0.95,
@@ -166,7 +292,20 @@ async function handleGenerate() {
     hideSection('viewerSection');
     hideSection('agentResultsSection');
     
+    // Show results container to display progress
+    showSection('resultsContainer');
+    
+    // Generate prompt hash (same algorithm as backend)
+    const promptHash = await generatePromptHash(prompt);
+    
     try {
+        // Start progress polling in parallel with generation (only for real API)
+        if (useRealAPI) {
+            pollProgress(promptHash).catch(err => {
+                console.warn('Progress polling ended:', err.message);
+            });
+        }
+        
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: {
