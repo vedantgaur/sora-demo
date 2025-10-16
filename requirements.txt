@@ -21,11 +21,9 @@ openai>=1.60.0
 python-dateutil>=2.8.0
 pytz>=2023.3
 
-# Optional: Real ML Dependencies (comment out for pure mock mode)
-# torch==2.1.0
-# torchvision==0.16.0
-# transformers==4.35.2
-# diffusers==0.24.0
+# Optional: Depth Estimation (for lightweight 3D reconstruction POC)
+torch>=2.0.0
+timm>=0.9.0
 
 # Optional: 3D Processing (comment out for mock mode)
 # open3d==0.18.0

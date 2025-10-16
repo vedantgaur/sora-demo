@@ -28,6 +28,10 @@ class Viewer3D {
         // Clock for animations
         this.clock = new THREE.Clock();
         
+        // Collision tracking
+        this.collisions = [];
+        this.collisionMarkers = [];
+        
         // Get parent dimensions for proper sizing
         const parent = this.canvas.parentElement;
         const width = parent.clientWidth || 800;
@@ -77,19 +81,27 @@ class Viewer3D {
         this.animate();
     }
     
-    async createWorldFromVideo(videoPath, prompt, frameCount = 3) {
+    async createWorldFromVideo(videoPath, prompt, frameCount = 3, useDepth = false) {
         try {
             // Update loading text
             const loadingSubtext = document.getElementById('loadingSubtext');
             if (loadingSubtext) {
-                loadingSubtext.textContent = 'Intelligently analyzing video frames...';
+                loadingSubtext.textContent = useDepth ? 
+                    'Estimating depth from video...' : 
+                    'Intelligently analyzing video frames...';
+            }
+            
+            if (useDepth) {
+                // Use depth estimation for point cloud reconstruction
+                await this.createWorldFromDepth(videoPath);
+                return;
             }
             
             // Use GPT-4 Vision to analyze video and generate scene
-            console.log('🎬 Starting 3D scene generation...');
-            console.log(`📹 Video path: ${videoPath}`);
-            console.log(`🎯 Prompt: ${prompt}`);
-            console.log(`🖼️  Analyzing ${frameCount} frames with GPT-4 Vision...`);
+            console.log('3D scene generation starting...');
+            console.log(`Video: ${videoPath}`);
+            console.log(`Prompt: ${prompt}`);
+            console.log(`Analyzing ${frameCount} frames with GPT-4 Vision...`);
             
             const response = await fetch('/api/generate_scene', {
                 method: 'POST',
@@ -138,16 +150,140 @@ class Viewer3D {
         this.createDemoWorld();
     }
     
+    async createWorldFromDepth(videoPath) {
+        try {
+            console.log('Depth-based reconstruction starting...');
+            console.log(`Video: ${videoPath}`);
+            
+            const response = await fetch('/api/generate_scene_depth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video_path: videoPath, max_points: 15000 })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success && data.points && data.points.length > 0) {
+                console.log(`Received ${data.points.length} points from depth estimation`);
+                this.loadPointCloud(data.points);
+            } else {
+                throw new Error('No points received from depth estimation');
+            }
+            
+        } catch (error) {
+            console.error('Depth reconstruction failed:', error);
+            // Fall back to demo world
+            this.createDemoWorld();
+        }
+    }
+    
+    loadPointCloud(points) {
+        // Clear existing worlds
+        if (this.world) {
+            this.scene.remove(this.world);
+            this.disposeGroup(this.world);
+        }
+        if (this.staticWorld) {
+            this.scene.remove(this.staticWorld);
+            this.staticWorld = null;
+        }
+        if (this.animatedWorld) {
+            this.scene.remove(this.animatedWorld);
+            this.disposeGroup(this.animatedWorld);
+            this.animatedWorld = null;
+        }
+        this.updateFunction = null;
+        this.generatedSceneFunction = null;
+        
+        console.log(`Loading point cloud with ${points.length} points...`);
+        
+        // Create geometry for point cloud
+        const geometry = new THREE.BufferGeometry();
+        
+        // Create arrays for positions and colors
+        const positions = new Float32Array(points.length * 3);
+        const colors = new Float32Array(points.length * 3);
+        
+        for (let i = 0; i < points.length; i++) {
+            const point = points[i];
+            positions[i * 3] = point.x;
+            positions[i * 3 + 1] = point.y;
+            positions[i * 3 + 2] = point.z;
+            
+            colors[i * 3] = point.r / 255;
+            colors[i * 3 + 1] = point.g / 255;
+            colors[i * 3 + 2] = point.b / 255;
+        }
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        
+        // Create point cloud material
+        const material = new THREE.PointsMaterial({
+            size: 0.05,
+            vertexColors: true,
+            sizeAttenuation: true
+        });
+        
+        // Create point cloud mesh
+        const pointCloud = new THREE.Points(geometry, material);
+        
+        // Add to scene
+        this.world = new THREE.Group();
+        this.world.add(pointCloud);
+        this.scene.add(this.world);
+        
+        console.log('Point cloud loaded successfully');
+    }
+    
     executeGeneratedCode(code) {
         try {
-            // Store the code for re-execution (for animations)
-            this.generatedSceneCode = code;
-            this.generatedSceneFunction = new Function('THREE', code);
+            // Clear any existing generated scene
+            if (this.staticWorld) {
+                this.scene.remove(this.staticWorld);
+                this.staticWorld = null;
+            }
+            if (this.animatedWorld) {
+                this.scene.remove(this.animatedWorld);
+                this.disposeGroup(this.animatedWorld);
+                this.animatedWorld = null;
+            }
+            this.updateFunction = null;
             
-            // Execute once to create initial scene
+            // Execute the generated code to get static objects and update function
+            const createScene = new Function('THREE', code);
+            const result = createScene.call(this, window.THREE);
+            
+            // Create static objects (once)
+            this.staticWorld = new THREE.Group();
+            if (result.staticObjects && Array.isArray(result.staticObjects)) {
+                result.staticObjects.forEach(obj => {
+                    if (obj && obj.isObject3D) {
+                        obj.castShadow = true;
+                        obj.receiveShadow = true;
+                        this.staticWorld.add(obj);
+                    }
+                });
+            }
+            this.scene.add(this.staticWorld);
+            
+            // Store the update function for animated objects
+            if (result.updateFunction && typeof result.updateFunction === 'function') {
+                this.updateFunction = result.updateFunction;
+            }
+            
+            // Create initial animated objects
+            this.animatedWorld = new THREE.Group();
+            this.scene.add(this.animatedWorld);
             this.updateGeneratedScene();
             
             console.log('Successfully executed GPT-generated scene code');
+            console.log('Static objects:', result.staticObjects ? result.staticObjects.length : 0);
+            console.log('Update function:', this.updateFunction ? 'Yes' : 'No');
             
         } catch (error) {
             console.error('Failed to execute generated code:', error);
@@ -158,40 +294,133 @@ class Viewer3D {
     }
     
     updateGeneratedScene() {
-        // Re-execute generated code every frame for animations
-        if (!this.generatedSceneFunction) return;
+        // Update animated objects every frame
+        if (!this.updateFunction || !this.animatedWorld) return;
         
         try {
-            // Clear existing world
-            if (this.world) {
-                this.scene.remove(this.world);
+            // Clear old animated objects and dispose of their resources
+            this.disposeGroup(this.animatedWorld);
+            while(this.animatedWorld.children.length > 0) {
+                this.animatedWorld.remove(this.animatedWorld.children[0]);
             }
             
-            this.world = new THREE.Group();
+            // Get current time
+            const time = this.clock.getElapsedTime();
             
-            // Execute the generated code with current context
-            // Bind 'this' so generated code can access this.clock for animations
-            // Pass THREE as the first argument (the function parameter)
-            const objects = this.generatedSceneFunction.call(this, window.THREE);
+            // Get new animated objects from the update function
+            const animatedObjects = this.updateFunction(time);
             
-            // Add objects to world
-            if (Array.isArray(objects)) {
-                objects.forEach(obj => {
+            // Add new animated objects
+            if (Array.isArray(animatedObjects)) {
+                animatedObjects.forEach(obj => {
                     if (obj && obj.isObject3D) {
                         obj.castShadow = true;
                         obj.receiveShadow = true;
-                        this.world.add(obj);
+                        this.animatedWorld.add(obj);
                     }
                 });
             }
             
-            this.scene.add(this.world);
+            // Check for collisions
+            this.checkCollisions();
             
         } catch (error) {
             console.error('Failed to update generated scene:', error);
             // Stop trying to update if it keeps failing
-            this.generatedSceneFunction = null;
+            this.updateFunction = null;
         }
+    }
+    
+    checkCollisions() {
+        // Clear previous collision markers
+        if (this.collisionMarkers) {
+            this.collisionMarkers.forEach(marker => {
+                this.scene.remove(marker);
+                this.disposeGroup(marker);
+            });
+        }
+        this.collisionMarkers = [];
+        this.collisions = [];
+        
+        if (!this.animatedWorld || !this.staticWorld) return;
+        
+        // Get all objects with bounding boxes
+        const animatedObjects = [];
+        const staticObjects = [];
+        
+        this.animatedWorld.traverse((obj) => {
+            if (obj.isMesh || obj.isGroup) {
+                animatedObjects.push(obj);
+            }
+        });
+        
+        this.staticWorld.traverse((obj) => {
+            if (obj.isMesh || obj.isGroup) {
+                staticObjects.push(obj);
+            }
+        });
+        
+        // Check collisions between animated and static objects
+        animatedObjects.forEach(animObj => {
+            const animBox = new THREE.Box3().setFromObject(animObj);
+            
+            staticObjects.forEach(staticObj => {
+                const staticBox = new THREE.Box3().setFromObject(staticObj);
+                
+                if (animBox.intersectsBox(staticBox)) {
+                    // Collision detected!
+                    const collision = {
+                        object1: animObj.name || 'Animated Object',
+                        object2: staticObj.name || 'Static Object',
+                        position: animBox.getCenter(new THREE.Vector3())
+                    };
+                    this.collisions.push(collision);
+                    
+                    // Create visual marker at collision point
+                    const markerGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                    const markerMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0xff0000,
+                        transparent: true,
+                        opacity: 0.7,
+                        emissive: 0xff0000,
+                        emissiveIntensity: 0.5
+                    });
+                    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+                    marker.position.copy(collision.position);
+                    this.scene.add(marker);
+                    this.collisionMarkers.push(marker);
+                }
+            });
+        });
+        
+        // Update collision count in UI
+        this.updateCollisionUI();
+    }
+    
+    updateCollisionUI() {
+        const collisionCountEl = document.getElementById('collisionCount');
+        if (collisionCountEl) {
+            collisionCountEl.textContent = this.collisions.length;
+            collisionCountEl.style.color = this.collisions.length > 0 ? '#ef4444' : '#22c55e';
+        }
+    }
+    
+    disposeGroup(group) {
+        // Properly dispose of geometries and materials to prevent memory leaks
+        if (!group) return;
+        
+        group.traverse((object) => {
+            if (object.geometry) {
+                object.geometry.dispose();
+            }
+            if (object.material) {
+                if (Array.isArray(object.material)) {
+                    object.material.forEach(material => material.dispose());
+                } else {
+                    object.material.dispose();
+                }
+            }
+        });
     }
     
     createSceneFromData(sceneData) {
@@ -254,12 +483,23 @@ class Viewer3D {
     }
     
     createDemoWorld() {
-        // Clear generated scene function (static world, no animations)
-        this.generatedSceneFunction = null;
+        // Clear generated scene (static + animated worlds)
+        if (this.staticWorld) {
+            this.scene.remove(this.staticWorld);
+            this.disposeGroup(this.staticWorld);
+            this.staticWorld = null;
+        }
+        if (this.animatedWorld) {
+            this.scene.remove(this.animatedWorld);
+            this.disposeGroup(this.animatedWorld);
+            this.animatedWorld = null;
+        }
+        this.updateFunction = null;
         
         // Clear existing world
         if (this.world) {
             this.scene.remove(this.world);
+            this.disposeGroup(this.world);
         }
         
         this.world = new THREE.Group();

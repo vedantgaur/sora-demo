@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 import traceback
+import json
 
 from src.config import Config
 from src.utils.logger import setup_logger, app_logger
@@ -90,6 +91,46 @@ def get_progress(prompt_hash):
         }), 404
 
 
+@app.route('/api/cached_prompts')
+def get_cached_prompts():
+    """
+    Get list of all cached prompts for quick reuse.
+    Returns prompts sorted by most recent first.
+    """
+    try:
+        cache_dir = Config.DATA_ROOT / 'cache'
+        
+        if not cache_dir.exists():
+            return jsonify({'prompts': []})
+        
+        prompts = []
+        for cache_file in cache_dir.glob('*.json'):
+            try:
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    
+                if data.get('success') and data.get('prompt'):
+                    prompts.append({
+                        'prompt': data['prompt'],
+                        'hash': data['prompt_hash'],
+                        'timestamp': cache_file.stat().st_mtime,
+                        'mode': data.get('mode', 'UNKNOWN')
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to read cache file {cache_file}: {e}")
+                continue
+        
+        # Sort by timestamp (most recent first)
+        prompts.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        logger.info(f"Found {len(prompts)} cached prompts")
+        return jsonify({'prompts': prompts, 'count': len(prompts)})
+        
+    except Exception as e:
+        logger.error(f"Failed to get cached prompts: {e}")
+        return jsonify({'error': str(e), 'prompts': []}), 500
+
+
 @app.route('/api/generate', methods=['POST'])
 def generate_videos():
     """
@@ -130,6 +171,32 @@ def generate_videos():
         # Generate unique hash for this prompt
         prompt_hash = generate_prompt_hash(prompt)
         
+        # Check if we have a cached generation for this prompt
+        cache_file = Config.DATA_ROOT / 'cache' / f'{prompt_hash}.json'
+        if cache_file.exists() and use_real_api:
+            logger.info(f"✨ Found cached generation for prompt: '{prompt}'")
+            try:
+                with open(cache_file, 'r') as f:
+                    cached_data = json.load(f)
+                    
+                # Verify cached videos still exist
+                all_exist = all(
+                    Path(take['video_path']).exists() 
+                    for take in cached_data['takes']
+                )
+                
+                if all_exist:
+                    logger.info(f"✅ Returning cached generation with {len(cached_data['takes'])} videos")
+                    return jsonify({
+                        **cached_data,
+                        'cached': True,
+                        'success': True
+                    })
+                else:
+                    logger.warning("⚠️  Some cached videos missing, regenerating...")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to load cache: {e}")
+        
         # Initialize progress tracking
         generation_progress[prompt_hash] = {
             'status': 'queued',
@@ -139,6 +206,10 @@ def generate_videos():
         
         # Create output directory
         output_dir = create_generation_directory(prompt_hash)
+        
+        # Ensure cache directory exists
+        cache_dir = Config.DATA_ROOT / 'cache'
+        cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Save metadata
         save_prompt_metadata(prompt_hash, prompt, {
@@ -226,6 +297,16 @@ def generate_videos():
             'mode': actual_mode,
             'success': True
         }
+        
+        # Save to cache if real API was used successfully
+        if use_real_api and actual_mode == 'REAL':
+            try:
+                cache_file = Config.DATA_ROOT / 'cache' / f'{prompt_hash}.json'
+                with open(cache_file, 'w') as f:
+                    json.dump(response, f, indent=2)
+                logger.info(f"💾 Saved generation to cache: {cache_file}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to save cache: {e}")
         
         logger.info(f"Generation complete: {len(takes)} takes created (mode: {actual_mode})")
         return jsonify(response)
@@ -479,6 +560,47 @@ def upload_video():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/generate_scene_depth', methods=['POST'])
+def generate_scene_with_depth():
+    """
+    Generate 3D point cloud from video using depth estimation (MiDaS).
+    Lightweight alternative to GPT-4 Vision code generation.
+    """
+    try:
+        data = request.get_json()
+        video_path = data.get('video_path')
+        max_points = data.get('max_points', 10000)  # Limit for performance
+        
+        logger.info("=" * 60)
+        logger.info("3D DEPTH RECONSTRUCTION")
+        logger.info("=" * 60)
+        logger.info(f"Video: {video_path}")
+        logger.info(f"Max points: {max_points}")
+        
+        # Generate point cloud from depth
+        point_cloud = generate_point_cloud_from_video(video_path, max_points)
+        
+        logger.info(f"Generated {len(point_cloud)} points")
+        logger.info("Depth reconstruction complete")
+        logger.info("=" * 60)
+        
+        return jsonify({
+            'success': True,
+            'points': point_cloud,
+            'source': 'depth_estimation',
+            'count': len(point_cloud)
+        })
+        
+    except Exception as e:
+        logger.error(f"Depth reconstruction failed: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'points': []
+        }), 500
+
+
 @app.route('/api/generate_scene', methods=['POST'])
 def generate_scene():
     """
@@ -554,64 +676,111 @@ def generate_scene():
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a 3D scene reconstruction expert. Analyze the video frames and generate THREE.JS CODE with ANIMATIONS to recreate the scene.
+                    "content": """You are a 3D scene reconstruction expert. Analyze video frames and generate THREE.JS CODE that recreates ANY scene type - natural environments, mechanical objects (catapults, vehicles), creatures, buildings, abstract forms, etc.
 
 CRITICAL REQUIREMENTS:
-1. Include ALL objects/characters from the video (people, animals, vehicles, etc.)
-2. Create ANIMATED movement for any moving objects
-3. Use this.clock for animations (available in the viewer)
-4. Make the scene DYNAMIC and ALIVE, not static
+1. Include ALL objects from the video with accurate object types and geometries
+2. Use NATURAL, ORGANIC placement with random offsets and clustering (NO systematic grids)
+3. Separate STATIC objects (environment) from ANIMATED objects (moving entities)
+4. Support ANY object: vehicles (composite geometries), catapults (Box+Cylinder), creatures (articulated groups), buildings, etc.
+5. Match real-world scale: humans ~1.8 units, trees 3-8 units, vehicles 2-4 units
 
 Your response must be ONLY valid JSON in this exact format:
 {
   "analysis": "Brief description of the scene, ALL objects/characters, and their movement",
-  "code": "Complete Three.js code with ANIMATIONS. Return as string with \\n for newlines."
+  "code": "Complete Three.js code. Return as string with \\n for newlines."
 }
 
-The code MUST:
-1. Include ALL elements visible in frames (people, trees, ground, sky, etc.)
-2. Use appropriate geometries: BoxGeometry (people/buildings), SphereGeometry (balls/heads), CylinderGeometry (trees/columns), PlaneGeometry (ground/walls)
-3. CREATE ANIMATIONS using this.clock.getElapsedTime() for moving objects
-4. Position objects realistically (y=0 is ground, people should be ~1.8 units tall)
-5. Return an array of meshes
+The code MUST return an object with TWO properties:
+{
+  staticObjects: [],   // Objects that NEVER move (created once)
+  updateFunction: function(time) { return []; }  // Returns animated objects with updated positions
+}
 
 CODE TEMPLATE:
-const objects = [];
-const time = this.clock.getElapsedTime();
+// STATIC OBJECTS (created once, never change)
+const staticObjects = [];
 
-// GROUND (always include)
+// Ground
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(30, 30),
   new THREE.MeshStandardMaterial({ color: 0x8B7355 })
 );
 ground.rotation.x = -Math.PI / 2;
-objects.push(ground);
+staticObjects.push(ground);
 
-// MOVING CHARACTER (if person/animal in video)
-const person = new THREE.Group();
-const body = new THREE.Mesh(
-  new THREE.BoxGeometry(0.5, 1.5, 0.3),
-  new THREE.MeshStandardMaterial({ color: 0x333333 })
-);
-body.position.y = 0.75;
-person.add(body);
-// ANIMATE: move person over time
-person.position.x = -5 + (time * 0.5) % 10;
-person.position.z = 0;
-objects.push(person);
+// Trees/Objects (NATURAL placement with random offsets and clustering)
+// Example: For a forest, distribute trees naturally
+const treePositions = [
+  [-6, 0, -3], [-4.5, 0, -5], [-7, 0, -7], [-3, 0, -4.5], [-8, 0, -2],
+  [5, 0, -4], [6.5, 0, -6], [4, 0, -3], [7, 0, -5.5], [3.5, 0, -7]
+];
+treePositions.forEach(([x, y, z]) => {
+  const tree = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.2 + Math.random() * 0.1, 0.3, 2.5 + Math.random()),
+    new THREE.MeshStandardMaterial({ color: 0x4a3520 })
+  );
+  trunk.position.y = 1.5;
+  tree.add(trunk);
+  const leaves = new THREE.Mesh(
+    new THREE.SphereGeometry(1.2 + Math.random() * 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x2d5016 })
+  );
+  leaves.position.y = 3 + Math.random();
+  tree.add(leaves);
+  tree.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
+  tree.rotation.y = Math.random() * Math.PI * 2;
+  staticObjects.push(tree);
+});
 
-// OTHER OBJECTS (trees, buildings, etc.)
-// Use CylinderGeometry for tree trunks, SphereGeometry for foliage
-// Add multiple objects if scene has them
+// UPDATE FUNCTION (called every frame for animations)
+function updateFunction(time) {
+  const animatedObjects = [];
+  
+  // Walking person (only update position, don't recreate)
+  const person = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 1.5, 0.3),
+    new THREE.MeshStandardMaterial({ color: 0x333333 })
+  );
+  body.position.y = 0.75;
+  person.add(body);
+  
+  // ANIMATE: smooth walking motion
+  person.position.x = -10 + (time * 1.5) % 20;  // Walk across scene
+  person.position.z = 0;
+  animatedObjects.push(person);
+  
+  return animatedObjects;
+}
 
-return objects;"""
+return { staticObjects, updateFunction };"""
                 },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Original prompt: '{prompt}'\n\nAnalyze these video frames and generate Three.js code to reconstruct the 3D scene:"
+                            "text": f"""Original prompt: '{prompt}'
+
+Analyze these {len(frames)} video frames and reconstruct the 3D scene:
+
+SPATIAL ANALYSIS:
+1. Identify ALL object types (natural: trees/rocks, mechanical: catapults/vehicles, creatures: animals/people, structures: buildings)
+2. Note SPATIAL DISTRIBUTION - are objects clustered naturally or spread out? On both sides or one side?
+3. Observe MOVEMENT PATTERNS - paths, trajectories, speeds, directions
+4. Study DEPTH and LAYERING - foreground, midground, background elements
+5. Match SCALE and PROPORTIONS
+
+PLACEMENT RULES:
+- Natural objects: Random clustering with organic variation in size/rotation
+- Mechanical objects: Use composite geometries (catapult = base + arm + counterweight)
+- Creatures: Articulated groups with realistic body proportions
+- Use scattered positions with slight random offsets for organic feel
+- NO GRIDS or systematic patterns - distribute naturally based on what you see
+
+Generate code that recreates this specific scene:"""
                         },
                         *frame_messages
                     ]
@@ -661,6 +830,198 @@ return objects;"""
         })
 
 
+def generate_point_cloud_from_video(video_path, max_points=10000):
+    """
+    Generate 3D point cloud from video using depth estimation.
+    Uses MiDaS for lightweight depth estimation (POC/MVP quality).
+    
+    Args:
+        video_path: Path to video file
+        max_points: Maximum number of points to return (for performance)
+    
+    Returns:
+        List of points: [{'x': float, 'y': float, 'z': float, 'r': int, 'g': int, 'b': int}, ...]
+    """
+    try:
+        import cv2
+        import numpy as np
+        from pathlib import Path
+        
+        # Try to use MiDaS for depth estimation
+        use_midas = False
+        try:
+            import torch
+            use_midas = True
+            logger.info("MiDaS available - using depth estimation")
+        except ImportError:
+            logger.warning("PyTorch not available - using simple depth approximation")
+        
+        # Handle path resolution
+        video_path_obj = Path(video_path)
+        if video_path_obj.is_absolute() and video_path_obj.exists():
+            video_path = video_path_obj
+        elif isinstance(video_path, str) and video_path.startswith('/data/'):
+            video_path = Config.DATA_ROOT.parent / video_path.lstrip('/')
+        else:
+            video_path = Config.DATA_ROOT.parent / str(video_path)
+        
+        logger.info(f"Loading video: {video_path}")
+        cap = cv2.VideoCapture(str(video_path))
+        
+        if not cap.isOpened():
+            raise ValueError(f"Could not open video: {video_path}")
+        
+        # Extract middle frame for depth estimation
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        middle_frame = total_frames // 2
+        
+        cap.set(cv2.CAP_PROP_POS_FRAMES, middle_frame)
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret:
+            raise ValueError("Could not read frame from video")
+        
+        # Resize for performance
+        target_width = 640
+        h, w = frame.shape[:2]
+        scale = target_width / w
+        frame = cv2.resize(frame, (target_width, int(h * scale)))
+        
+        # Estimate depth
+        if use_midas:
+            depth = estimate_depth_midas(frame)
+        else:
+            depth = estimate_depth_simple(frame)
+        
+        # Convert depth to point cloud
+        points = depth_to_pointcloud(frame, depth, max_points)
+        
+        logger.info(f"Created point cloud with {len(points)} points")
+        return points
+        
+    except Exception as e:
+        logger.error(f"Point cloud generation failed: {e}")
+        traceback.print_exc()
+        # Return empty point cloud
+        return []
+
+
+def estimate_depth_midas(frame):
+    """
+    Estimate depth using MiDaS (lightweight POC version).
+    Uses MiDaS Small model for speed.
+    """
+    import torch
+    import cv2
+    import numpy as np
+    
+    # Load MiDaS model (cached after first load)
+    if not hasattr(estimate_depth_midas, 'model'):
+        logger.info("Loading MiDaS Small model...")
+        model_type = "MiDaS_small"  # Lightweight for POC
+        estimate_depth_midas.model = torch.hub.load("intel-isl/MiDaS", model_type, trust_repo=True)
+        estimate_depth_midas.model.eval()
+        
+        midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms", trust_repo=True)
+        if model_type == "MiDaS_small":
+            estimate_depth_midas.transform = midas_transforms.small_transform
+        else:
+            estimate_depth_midas.transform = midas_transforms.dpt_transform
+        
+        logger.info("MiDaS model loaded")
+    
+    # Prepare input
+    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    input_batch = estimate_depth_midas.transform(img_rgb)
+    
+    # Predict depth
+    with torch.no_grad():
+        prediction = estimate_depth_midas.model(input_batch)
+        prediction = torch.nn.functional.interpolate(
+            prediction.unsqueeze(1),
+            size=img_rgb.shape[:2],
+            mode="bicubic",
+            align_corners=False,
+        ).squeeze()
+    
+    depth = prediction.cpu().numpy()
+    
+    # Normalize to 0-1
+    depth = (depth - depth.min()) / (depth.max() - depth.min())
+    
+    return depth
+
+
+def estimate_depth_simple(frame):
+    """
+    Simple depth approximation without ML (fallback).
+    Uses edge detection and blur as a rough depth proxy.
+    """
+    import cv2
+    import numpy as np
+    
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    depth = cv2.GaussianBlur(edges.astype(np.float32), (21, 21), 0)
+    depth = depth / depth.max() if depth.max() > 0 else depth
+    
+    return depth
+
+
+def depth_to_pointcloud(frame, depth, max_points=10000):
+    """
+    Convert depth map and RGB frame to 3D point cloud.
+    
+    Args:
+        frame: RGB frame (numpy array)
+        depth: Depth map (numpy array, 0-1 normalized)
+        max_points: Maximum number of points to return
+    
+    Returns:
+        List of point dictionaries with x, y, z, r, g, b
+    """
+    import numpy as np
+    
+    h, w = depth.shape
+    
+    # Create camera intrinsics (approximate)
+    fx = fy = w  # Focal length approximation
+    cx, cy = w / 2, h / 2
+    
+    # Sample points uniformly
+    step = max(1, int(np.sqrt((h * w) / max_points)))
+    
+    points = []
+    for y in range(0, h, step):
+        for x in range(0, w, step):
+            z = float(depth[y, x])
+            
+            # Skip points with no depth
+            if z < 0.01:
+                continue
+            
+            # Backproject to 3D
+            # Invert depth so closer objects have larger z
+            z_3d = (1.0 - z) * 10.0  # Scale to reasonable range
+            x_3d = (x - cx) * z_3d / fx
+            y_3d = (cy - y) * z_3d / fy  # Flip Y for 3D coordinates
+            
+            # Get color
+            b, g, r = frame[y, x]
+            
+            points.append({
+                'x': float(x_3d),
+                'y': float(y_3d),
+                'z': float(z_3d),
+                'r': int(r),
+                'g': int(g),
+                'b': int(b)
+            })
+    
+    return points
+
+
 def extract_video_keyframes(video_path, frame_count=3):
     """Extract evenly distributed frames from video as base64 encoded JPEGs.
     
@@ -673,17 +1034,19 @@ def extract_video_keyframes(video_path, frame_count=3):
         import base64
         from pathlib import Path
         
-        # Handle web URL paths (e.g., /data/samples/demo.mp4)
-        # Convert to filesystem path
-        if isinstance(video_path, str) and video_path.startswith('/'):
+        # Handle different path formats
+        video_path_obj = Path(video_path)
+        
+        # Check if it's already an absolute filesystem path
+        if video_path_obj.is_absolute() and video_path_obj.exists():
+            # Already a valid absolute path, use as-is
+            video_path = video_path_obj
+        elif isinstance(video_path, str) and video_path.startswith('/data/'):
             # This is a web URL path, strip leading slash and resolve relative to project root
-            video_path = video_path.lstrip('/')
-            video_path = Config.DATA_ROOT.parent / video_path
+            video_path = Config.DATA_ROOT.parent / video_path.lstrip('/')
         else:
-            # Convert to absolute path if needed
-            video_path_obj = Path(video_path)
-            if not video_path_obj.is_absolute():
-                video_path = Config.DATA_ROOT.parent / video_path
+            # Relative path, resolve relative to project root
+            video_path = Config.DATA_ROOT.parent / str(video_path)
         
         logger.info(f"🎥 Reading video from: {video_path}")
         cap = cv2.VideoCapture(str(video_path))

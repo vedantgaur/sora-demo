@@ -1,70 +1,90 @@
 # Autonomous Video-to-Playable World Director
 
-An end-to-end system that generates videos using Sora API, reconstructs them into interactive 3D environments using **GPT-4 Vision**, deploys animated agents to test physics and continuity, and automatically revises prompts through an agentic feedback loop.
+A sophisticated pipeline that transforms text prompts into playable 3D environments using OpenAI's Sora API for video generation and GPT-4 Vision for intelligent 3D scene reconstruction.
 
-## 🎯 Project Goal
+## Overview
 
-Demonstrate a complete agentic feedback loop for generative world creation:
-1. **Generates** video from text prompts (Sora API or mock)
-2. **Analyzes** video frames with GPT-4 Vision to understand the scene
-3. **Reconstructs** into 3D using AI-generated Three.js code
-4. **Tests** the world with animated agents to find flaws
-5. **Revises** prompts automatically to improve next generation
+This system implements an autonomous feedback loop for creating, testing, and refining 3D worlds:
 
-## ✨ Key Features
+1. **Text-to-Video Generation**: Generate videos from prompts using Sora API
+2. **Intelligent 3D Reconstruction**: Analyze video frames with GPT-4 Vision to generate Three.js 3D scenes
+3. **Real-time Collision Detection**: Monitor object interactions with bounding box collision detection
+4. **Agent-based Testing**: Simulate physics and navigation to validate scene quality
+5. **Iterative Refinement**: Automatically improve prompts based on agent feedback
 
-- **GPT-4 Vision Integration**: Analyzes video keyframes to generate accurate 3D scenes (works in both Mock & Sora modes!)
-- **Single Video Generation**: Streamlined workflow - generates 1 high-quality video per prompt
-- **Real-time Agent Animation**: Watch AI agents explore and test your 3D world
-- **Dark Mode SaaS UI**: Modern, professional interface inspired by Linear/Vercel
-- **Dual Mode**: Mock mode (free) and Real Sora API mode
-- **Video Upload & Sample**: Test with your own videos or use our sample video - no API costs
+## Key Features
 
-## 🏗️ Architecture
+### Video Generation
+- Sora API integration with real-time progress tracking
+- Intelligent caching system to avoid redundant API calls
+- Mock mode for development and testing
+- Support for multiple video resolutions and durations
+
+### 3D Scene Reconstruction
+- GPT-4 Vision analyzes video keyframes to understand scene layout
+- Generates Three.js code for any object type:
+  - Natural environments (forests, landscapes)
+  - Mechanical objects (catapults, vehicles, machinery)
+  - Creatures and characters (people, animals)
+  - Structures (buildings, bridges)
+- Natural, organic object placement with clustering and randomization
+- Separates static and animated objects for performance
+- Real-time animation system with smooth movement
+
+### Collision Detection
+- Bounding box collision detection between all objects
+- Visual markers at collision points for debugging
+- Live collision count display
+- Performance-optimized checking every frame
+
+### Agent Testing
+- Simulated VLA (Vision-Language-Action) agent
+- Tests for physics violations, navigation issues
+- Generates quality scores and feedback
+- Identifies areas for improvement
+
+## Architecture
 
 ```
-┌─────────────┐
-│   User UI   │
-└──────┬──────┘
-       │
-┌──────▼──────────────────────────────────────────┐
-│         Flask Orchestrator (main.py)            │
-└──────┬──────────────────────────────────────────┘
-       │
-   ┌───┴──────────────────────────────┐
-   │                                   │
-┌──▼────────────┐           ┌─────────▼──────────┐
-│ Sora Handler  │           │  Scoring Module    │
-│ (Video Gen)   │           │  (Quality Rank)    │
-└──┬────────────┘           └─────────┬──────────┘
-   │                                   │
-┌──▼────────────────┐       ┌─────────▼──────────┐
-│ Reconstruction    │       │  Agent Module      │
-│ (Video→3D)        │       │  (Physics Test)    │
-└──┬────────────────┘       └─────────┬──────────┘
-   │                                   │
-   └───────────┬───────────────────────┘
-               │
-        ┌──────▼──────────┐
-        │ Prompt Reviser  │
-        │ (Auto-improve)  │
-        └─────────────────┘
+sora-demo/
+├── src/
+│   ├── main.py                 # Flask server and orchestrator
+│   ├── config.py               # Configuration management
+│   ├── sora_handler.py         # Sora API integration
+│   ├── scoring_module.py       # Video quality scoring
+│   ├── reconstruction_module.py # 3D reconstruction (future: Gaussian Splatting)
+│   ├── agent_module.py         # VLA agent simulation
+│   └── prompt_reviser.py       # Automatic prompt improvement
+├── static/
+│   ├── script.js               # Frontend application logic
+│   ├── viewer3d.js             # Three.js 3D scene management
+│   └── style.css               # Modern UI styling
+├── templates/
+│   └── index.html              # Main application interface
+└── data/
+    ├── generations/            # Generated videos (cached by prompt hash)
+    ├── reconstructions/        # 3D reconstruction outputs
+    ├── cache/                  # API response cache
+    └── samples/                # Sample videos for testing
 ```
 
-## 🚀 Quick Start
+## Installation
 
 ### Prerequisites
-- Python 3.9+
-- pip or conda
+- Python 3.8+
+- Node.js (for frontend development)
+- FFmpeg (for video processing)
+- OpenAI API key
 
-### Installation
+### Setup
 
-1. Clone and navigate to the project:
+1. Clone the repository:
 ```bash
-cd /Users/vedantgaur/Downloads/Projects/sora-demo
+git clone <repository-url>
+cd sora-demo
 ```
 
-2. Create a virtual environment:
+2. Create virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -75,156 +95,261 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+4. Install FFmpeg (if not already installed):
 ```bash
-cp .env.example .env
-# Edit .env with your API keys (optional for mock mode)
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# Windows
+# Download from https://ffmpeg.org/download.html
 ```
 
-5. Run the application:
+5. Set environment variables:
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+export PORT=5001  # Optional, defaults to 5001
+```
+
+6. Run the application:
 ```bash
 python src/main.py
 ```
 
-6. Open your browser:
+7. Open browser to `http://localhost:5001`
+
+## Usage
+
+### Mock Mode (Development)
+Uses pre-generated sample videos and simulated 3D reconstruction for testing without API costs.
+
+1. Toggle "Use Real Sora API" OFF
+2. Select video source (Demo or Sora Generated)
+3. Click "Show Video"
+4. Click "Reconstruct 3D World"
+5. Observe collision detection in real-time
+6. Run agent test for quality assessment
+
+### Sora Mode (Production)
+Generates videos via Sora API and uses GPT-4 Vision for intelligent scene reconstruction.
+
+1. Toggle "Use Real Sora API" ON
+2. Enter descriptive prompt (e.g., "A catapult launching a projectile in a medieval field")
+3. Click "Generate Video"
+4. Monitor progress bar during generation
+5. Click "Reconstruct 3D World" when complete
+6. Explore 3D scene with mouse controls
+7. Monitor collision detection
+8. Run agent test for validation
+
+### 3D Viewer Controls
+- **Left-click + drag**: Rotate camera
+- **Right-click + drag**: Pan camera
+- **Scroll wheel**: Zoom in/out
+- **Collision panel**: Shows real-time collision count
+
+### Prompt Engineering Tips
+
+**Effective prompts include:**
+- Object type and action (e.g., "catapult launching", "car driving")
+- Environment details (e.g., "through a dense forest", "across a desert")
+- Camera perspective (e.g., "aerial view", "close-up")
+- Lighting/atmosphere (e.g., "golden hour", "foggy morning")
+
+**Examples:**
 ```
-http://localhost:5001
+Good: "A medieval catapult launching a boulder in a grassy field with scattered rocks"
+Good: "A red sports car driving along a winding coastal road at sunset"
+Good: "A dragon flying over a mountain range with snow-capped peaks"
+
+Avoid: "A thing moving" (too vague)
+Avoid: "Cool video" (no specifics)
 ```
 
-## 📁 Project Structure
+## Configuration
 
+Edit `src/config.py` to customize:
+
+- `VIDEO_DURATION_SECONDS`: Video length (4, 8, or 12 seconds - Sora API requirement)
+- `VIDEO_RESOLUTION`: Resolution (720x1280, 1280x720, 1024x1792, 1792x1024)
+- `VIDEO_FPS`: Frames per second (default: 24)
+- `NUM_TAKES_PER_GENERATION`: Number of videos per prompt (default: 1)
+- `USE_MOCK`: Enable mock mode (default: True for safety)
+
+## API Integration
+
+### Sora API
+The system uses OpenAI's Sora API for video generation with:
+- Asynchronous job polling
+- Real-time progress updates
+- Automatic retry logic
+- Intelligent caching by prompt hash
+
+### GPT-4 Vision
+Analyzes video keyframes to:
+- Identify all objects and their types
+- Determine spatial layout and distribution
+- Generate Three.js code for scene reconstruction
+- Create natural, organic object placement
+- Animate moving objects with realistic motion
+
+## Caching System
+
+Generated videos are cached by prompt hash to:
+- Reduce API costs
+- Enable instant retrieval of previous generations
+- Support multi-user deployment
+- Maintain generation history
+
+Cache location: `data/cache/{prompt_hash}.json`
+
+## Deployment
+
+### Vercel Deployment (Recommended)
+
+1. Install Vercel CLI:
+```bash
+npm i -g vercel
 ```
-sora-demo/
-├── src/
-│   ├── main.py                    # Flask orchestrator & API endpoints
-│   ├── config.py                  # Configuration management
-│   ├── sora_handler.py            # Sora API interface
-│   ├── scoring_module.py          # Video quality scoring
-│   ├── reconstruction_module.py   # Video-to-3D conversion
-│   ├── agent_module.py            # Agent-based physics testing
-│   ├── prompt_reviser.py          # Automatic prompt improvement
-│   └── utils/
-│       ├── file_manager.py        # File system operations
-│       └── logger.py              # Logging utilities
-├── templates/
-│   └── index.html                 # Web UI
-├── static/
-│   ├── script.js                  # Frontend logic
-│   └── style.css                  # UI styling
-├── data/                          # Generated content (gitignored)
-│   ├── generations/               # Video takes
-│   └── reconstructions/           # 3D assets
-├── tests/                         # Unit and integration tests
-├── docker/                        # Docker configuration
-├── requirements.txt               # Python dependencies
-├── .env.example                   # Environment template
-└── README.md
+
+2. Create `vercel.json`:
+```json
+{
+  "builds": [
+    {
+      "src": "src/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/main.py"
+    }
+  ],
+  "env": {
+    "OPENAI_API_KEY": "@openai-api-key"
+  }
+}
 ```
 
-## 🎬 User Journey
+3. Deploy:
+```bash
+vercel --prod
+```
 
-### 1. Generate or Upload Video
-- **Option A**: Enter a text prompt (e.g., "A robot walks down a futuristic hallway") and click **Generate Videos**
-- **Option B**: Click **Use Sample Video** for instant testing
-- **Option C**: Upload your own video in Mock Mode
-The system generates 1 high-quality video and scores it.
+4. Add environment variable in Vercel dashboard:
+   - Key: `OPENAI_API_KEY`
+   - Value: Your OpenAI API key
 
-### 2. Reconstruct to 3D World
-Click **Reconstruct 3D World**. The system:
-- Extracts keyframes from the video
-- Analyzes them with **GPT-4 Vision** (if API key provided)
-- Generates custom Three.js code to recreate the scene
-- Renders an interactive 3D environment matching the video
-
-### 3. Run Agent Test
-Click **Run Agent Test**. Watch a simulated agent navigate the 3D world in real-time:
-- Agent moves intelligently through the environment
-- Tests for physics violations (collisions, unstable geometry)
-- Red markers appear where violations are detected
-- Results show issue count and descriptions
-
-### 4. Auto-Revise Prompt
-Based on detected violations, the system automatically generates an improved prompt (e.g., "A robot walks down a wide, well-lit futuristic hallway with clear pathways and stable floor"). Click **Regenerate** to iterate with the enhanced prompt.
-
-## 🔧 Configuration
-
-### Mock Mode (Default)
-No API keys needed. Uses simulated video generation and scoring for rapid development and testing.
-
-### Production Mode
-Set `USE_MOCK=false` in `.env` and provide:
-- `SORA_API_KEY`: Your Sora API credentials
-- `RECONSTRUCTION_SERVICE_URL`: 3D reconstruction endpoint
-- `AGENT_MODEL_PATH`: Path to trained VLA model
-
-## 🧪 Testing
+### Docker Deployment
 
 ```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src tests/
-
-# Run specific test file
-pytest tests/test_sora_handler.py
+docker build -t sora-demo .
+docker run -p 5001:5001 -e OPENAI_API_KEY="your-key" sora-demo
 ```
 
-## 🐳 Docker Deployment
+## Roadmap
 
-```bash
-# Build image
-docker build -t sora-director .
+### Current (v1.0)
+- Sora API integration
+- GPT-4 Vision scene reconstruction
+- Real-time collision detection
+- Agent-based testing
+- Caching system
 
-# Run container
-docker run -p 5000:5000 -v $(pwd)/data:/app/data sora-director
-```
+### Planned (v2.0)
+- **Video-Gaussian Splatting**: Replace GPT-generated scenes with actual 3D reconstruction
+  - Integrate Gaussian Splatting viewer
+  - Depth estimation from video frames
+  - Point cloud generation and meshing
+  - NeRF-based reconstruction for complex scenes
+- **Multi-agent collaboration**: Multiple agents test different aspects
+- **Automated prompt refinement**: Learn from agent feedback
+- **Export capabilities**: GLB, USDZ, OBJ formats
+- **VR/AR support**: WebXR integration
 
-## 📊 Evaluation Metrics
+### Future (v3.0)
+- Real-time video streaming during generation
+- Collaborative editing interface
+- Physics engine integration (Cannon.js, Ammo.js)
+- Material/texture generation
+- Audio synthesis and spatial audio
 
-- **Identity Persistence**: Embedding cosine similarity across frames
-- **Path Realism**: Velocity/acceleration smoothness
-- **Physics Plausibility**: Collision compliance and trajectory stability
-- **Audio-Visual Sync**: Event-to-sound alignment (Sora 2)
+## Technology Stack
 
-## 🛠️ Technology Stack
+**Backend:**
+- Python 3.8+ (Flask)
+- OpenAI SDK (Sora, GPT-4o)
+- OpenCV (video frame extraction)
+- NumPy (numerical processing)
 
-- **Backend**: Flask, Python 3.9+
-- **Frontend**: Vanilla JavaScript, HTML5, CSS3
-- **Video Processing**: OpenCV, FFmpeg
-- **3D Reconstruction**: Video Gaussian Splatting
-- **Agent**: RT-2-style VLA policy (simulated in MVP)
-- **Storage**: Local filesystem (upgradeable to S3/GCS)
+**Frontend:**
+- Vanilla JavaScript (ES6+)
+- Three.js (3D rendering)
+- OrbitControls (camera navigation)
+- Modern CSS (Glassmorphism, animations)
 
-## 🔮 Roadmap
+**Infrastructure:**
+- Flask development server
+- Vercel serverless (deployment)
+- File-based caching
+- SHA256 prompt hashing
 
-### MVP (Current)
-- [x] Text-to-video generation with ranking
-- [x] Basic 3D reconstruction
-- [x] Simulated agent testing
-- [x] Automatic prompt revision
+## Troubleshooting
 
-### Phase 2
-- [ ] Real Sora API integration
-- [ ] Advanced video-Gaussian reconstruction
-- [ ] RT-2 VLA deployment
-- [ ] Multi-environment support
+### Video not playing
+- Ensure FFmpeg is installed
+- Check video codec (must be H.264 for web compatibility)
+- Clear browser cache and hard refresh (Cmd+Shift+R)
 
-### Phase 3
-- [ ] Promptable mid-scene events
-- [ ] Audio-visual sync testing
-- [ ] C2PA provenance metadata
-- [ ] Social feed integration
+### Collision count always showing 0
+- Check that both static and animated worlds are populated
+- Verify objects have bounding boxes
+- Console log errors for Three.js issues
 
-## 📝 License
+### GPT-4 Vision returning default scene
+- Verify OPENAI_API_KEY is set correctly
+- Check API rate limits
+- Review console logs for API errors
+- Ensure video frames are being extracted properly
+
+### Sora API errors
+- Verify video duration is 4, 8, or 12 seconds
+- Check resolution is supported (720x1280, 1280x720, 1024x1792, 1792x1024)
+- Monitor API quota and billing
+
+## Performance Optimization
+
+- **Collision detection**: Runs per-frame, optimized with early exit
+- **Scene updates**: Only animated objects recreated each frame
+- **Memory management**: Proper disposal of geometries and materials
+- **Caching**: Prevents redundant API calls
+- **Lazy loading**: Videos loaded on-demand
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+## License
 
 MIT License - see LICENSE file for details
 
-## 🤝 Contributing
+## Acknowledgments
 
-Contributions welcome! Please read CONTRIBUTING.md for guidelines.
+- OpenAI for Sora and GPT-4 Vision APIs
+- Three.js community for 3D rendering tools
+- Contributors and testers
 
-## 📧 Contact
+## Support
 
-For questions or issues, please open a GitHub issue or contact the maintainer.
-
+For issues, questions, or contributions:
+- GitHub Issues: [repository-url]/issues
+- Documentation: [repository-url]/wiki
+- Email: support@example.com

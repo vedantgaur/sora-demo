@@ -50,8 +50,13 @@ function setupEventListeners() {
     // Run agent button
     document.getElementById('runAgentBtn').addEventListener('click', handleRunAgent);
     
-    // Regenerate button
-    document.getElementById('regenerateBtn').addEventListener('click', handleRegenerate);
+    // Regenerate 3D scene button
+    document.getElementById('regenerate3DBtn').addEventListener('click', handleRegenerate3D);
+    
+    // Regenerate button (for video regeneration)
+    if (document.getElementById('regenerateBtn')) {
+        document.getElementById('regenerateBtn').addEventListener('click', handleRegenerate);
+    }
     
     // Video source selector (update prompt when changing)
     document.querySelectorAll('input[name="videoSource"]').forEach(radio => {
@@ -73,6 +78,59 @@ function setupEventListeners() {
             handleGenerate();
         }
     });
+    
+    // Cached prompts dropdown
+    const cachedPromptsDropdown = document.getElementById('cachedPromptsDropdown');
+    if (cachedPromptsDropdown) {
+        // Load cached prompts
+        loadCachedPrompts();
+        
+        // Handle selection
+        cachedPromptsDropdown.addEventListener('change', (e) => {
+            if (e.target.value) {
+                const promptInput = document.getElementById('promptInput');
+                promptInput.value = e.target.value;
+                // Reset dropdown
+                cachedPromptsDropdown.value = '';
+                // Show success message
+                showError('Cached prompt loaded!', 'warning');
+            }
+        });
+    }
+}
+
+/**
+ * Load cached prompts from backend
+ */
+async function loadCachedPrompts() {
+    try {
+        const response = await fetch('/api/cached_prompts');
+        const data = await response.json();
+        
+        const dropdown = document.getElementById('cachedPromptsDropdown');
+        if (!dropdown) return;
+        
+        // Clear existing options except the first one
+        dropdown.innerHTML = '<option value="">Load cached prompt...</option>';
+        
+        if (data.prompts && data.prompts.length > 0) {
+            data.prompts.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.prompt;
+                // Truncate long prompts for dropdown display
+                const displayText = item.prompt.length > 50 
+                    ? item.prompt.substring(0, 47) + '...' 
+                    : item.prompt;
+                option.textContent = `${displayText} (${item.mode})`;
+                option.title = item.prompt; // Full text on hover
+                dropdown.appendChild(option);
+            });
+            
+            console.log(`Loaded ${data.count} cached prompts`);
+        }
+    } catch (error) {
+        console.error('Failed to load cached prompts:', error);
+    }
 }
 
 /**
@@ -328,9 +386,15 @@ async function handleGenerate() {
             currentPromptHash = data.prompt_hash;
             currentPrompt = data.prompt;
             
+            // Show info if video was cached
+            if (data.cached) {
+                console.log('Using cached video from previous generation');
+                showError('Using cached video - no API call needed!', 'warning');
+            }
+            
             // Show warning if real API was requested but fell back to mock
             if (useRealAPI && data.mode === 'MOCK') {
-                console.warn('⚠️  Real Sora API unavailable - generated mock video instead');
+                console.warn('Real Sora API unavailable - generated mock video instead');
                 showError('Note: Sora API is not available (limited beta access). Using mock video instead.', 'warning');
             }
             
@@ -508,8 +572,12 @@ function displayWorldViewer(data) {
                 // Update loading text
                 loadingSubtext.textContent = 'Extracting video frames...';
                 
-                // Use GPT-4 Vision to analyze the actual video
-                await viewer3D.createWorldFromVideo(selectedVideoPath, currentPrompt, currentFrameCount);
+                // Get reconstruction method
+                const reconstructionMethod = document.getElementById('reconstructionMethod')?.value || 'gpt';
+                const useDepth = reconstructionMethod === 'depth';
+                
+                // Reconstruct 3D scene
+                await viewer3D.createWorldFromVideo(selectedVideoPath, currentPrompt, currentFrameCount, useDepth);
             } else {
                 viewer3D.createDemoWorld();
             }
@@ -522,6 +590,50 @@ function displayWorldViewer(data) {
             showError('Failed to generate 3D scene');
         }
     }, 200);
+}
+
+/**
+ * Regenerate 3D scene with selected method
+ */
+async function handleRegenerate3D() {
+    if (!selectedVideoPath) {
+        showError('No video to reconstruct');
+        return;
+    }
+    
+    const regenerate3DBtn = document.getElementById('regenerate3DBtn');
+    setButtonLoading(regenerate3DBtn, true);
+    
+    try {
+        // Show loading indicator
+        const loading = document.getElementById('viewerLoading');
+        const loadingSubtext = document.getElementById('loadingSubtext');
+        if (loading) loading.style.display = 'flex';
+        
+        // Get reconstruction method
+        const reconstructionMethod = document.getElementById('reconstructionMethod')?.value || 'gpt';
+        const useDepth = reconstructionMethod === 'depth';
+        
+        console.log(`Regenerating 3D scene with method: ${reconstructionMethod}`);
+        
+        // Regenerate scene
+        await viewer3D.createWorldFromVideo(selectedVideoPath, currentPrompt, currentFrameCount, useDepth);
+        
+        // Hide loading indicator
+        if (loading) loading.style.display = 'none';
+        
+        showError('3D scene regenerated successfully!', 'warning');
+        
+    } catch (error) {
+        console.error('3D regeneration error:', error);
+        showError('Failed to regenerate 3D scene. Please try again.');
+        
+        // Hide loading indicator
+        const loading = document.getElementById('viewerLoading');
+        if (loading) loading.style.display = 'none';
+    } finally {
+        setButtonLoading(regenerate3DBtn, false);
+    }
 }
 
 /**

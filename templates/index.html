@@ -33,7 +33,12 @@
             
             <div class="card">
                 <div class="form-group">
-                    <label for="promptInput">Describe your scene:</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label for="promptInput">Describe your scene:</label>
+                        <select id="cachedPromptsDropdown" style="padding: 6px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #a1a1aa; font-size: 13px; cursor: pointer;">
+                            <option value="">Load cached prompt...</option>
+                        </select>
+                    </div>
                     <textarea 
                         id="promptInput" 
                         class="prompt-input" 
@@ -57,6 +62,16 @@
                         </label>
                     </div>
                     <p style="color: #71717a; font-size: 12px; margin-top: 8px;">Choose a video source to test 3D reconstruction</p>
+                </div>
+                
+                <!-- Reconstruction Method Selector -->
+                <div class="form-group">
+                    <label for="reconstructionMethod" style="color: #fafafa; font-size: 14px; font-weight: 500; margin-bottom: 8px; display: block;">3D Reconstruction Method</label>
+                    <select id="reconstructionMethod" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fafafa; font-size: 14px;">
+                        <option value="gpt">GPT-4 Vision (Fast, Code Generation)</option>
+                        <option value="depth">Depth Estimation (POC, Point Cloud)</option>
+                    </select>
+                    <p style="color: #71717a; font-size: 12px; margin-top: 8px;">Depth estimation uses MiDaS for lightweight 3D reconstruction</p>
                 </div>
                 
                 <button id="generateBtn" class="btn btn-primary btn-large">
@@ -105,14 +120,35 @@
                         <p class="loading-subtext" id="loadingSubtext">Intelligently generating scene...</p>
                     </div>
                     <div class="viewer-controls">
-                        <div class="control-hint">🖱️ Left-click: Rotate | Right-click: Pan | Scroll: Zoom</div>
+                        <div class="control-hint">Left-click: Rotate | Right-click: Pan | Scroll: Zoom</div>
+                    </div>
+                    
+                    <!-- Collision Detection Panel -->
+                    <div class="collision-panel">
+                        <div class="collision-header">
+                            <span class="collision-icon">⚠️</span>
+                            <span>Collision Detection</span>
+                        </div>
+                        <div class="collision-stats">
+                            <div class="collision-stat">
+                                <span class="stat-label">Collisions:</span>
+                                <span class="stat-value" id="collisionCount">0</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <button id="runAgentBtn" class="btn btn-secondary">
-                    <span class="btn-text">🤖 Run Agent Test</span>
-                    <span class="btn-loader" style="display: none;">⏳ Testing...</span>
-                </button>
+                <div style="display: flex; gap: 12px;">
+                    <button id="regenerate3DBtn" class="btn btn-secondary" style="flex: 1;">
+                        <span class="btn-text">Regenerate 3D Scene</span>
+                        <span class="btn-loader" style="display: none;">Generating...</span>
+                    </button>
+                    
+                    <button id="runAgentBtn" class="btn btn-secondary" style="flex: 1;">
+                        <span class="btn-text">Run Agent Test</span>
+                        <span class="btn-loader" style="display: none;">Testing...</span>
+                    </button>
+                </div>
             </div>
         </section>
 
