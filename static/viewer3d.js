@@ -170,8 +170,9 @@ class Viewer3D {
             this.world = new THREE.Group();
             
             // Execute the generated code with current context
-            const THREE = window.THREE;
-            const objects = this.generatedSceneFunction.call(this, THREE);
+            // Bind 'this' so generated code can access this.clock for animations
+            // Pass THREE as the first argument (the function parameter)
+            const objects = this.generatedSceneFunction.call(this, window.THREE);
             
             // Add objects to world
             if (Array.isArray(objects)) {
