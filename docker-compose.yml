@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  sora-director:
+    build: .
+    container_name: sora-director
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=False
+      - USE_MOCK=true
+      - HOST=0.0.0.0
+      - PORT=5000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add Redis for caching (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: sora-redis
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
+
+  # Optional: Add PostgreSQL for persistent storage (uncomment if needed)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: sora-postgres
+  #   environment:
+  #     POSTGRES_DB: sora_director
+  #     POSTGRES_USER: sora
+  #     POSTGRES_PASSWORD: changeme
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:
+

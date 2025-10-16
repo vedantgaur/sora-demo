@@ -1,0 +1,51 @@
+# Web Framework
+Flask>=3.0.0
+Flask-CORS>=4.0.0
+
+# Video Processing
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# HTTP & API
+requests>=2.31.0
+httpx>=0.25.0
+
+# Configuration & Environment
+python-dotenv>=1.0.0
+
+# OpenAI SDK (for real Sora API)
+openai>=1.60.0
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Optional: Real ML Dependencies (comment out for pure mock mode)
+# torch==2.1.0
+# torchvision==0.16.0
+# transformers==4.35.2
+# diffusers==0.24.0
+
+# Optional: 3D Processing (comment out for mock mode)
+# open3d==0.18.0
+# trimesh==4.0.5
+
+# Optional: Advanced Video Processing
+# moviepy==1.0.3
+# ffmpeg-python==0.2.0
+
+# Development Dependencies
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.7.0
+
+# Optional: Production Dependencies
+# gunicorn==21.2.0
+# redis==5.0.1
+# celery==5.3.4
+# sqlalchemy==2.0.23
+

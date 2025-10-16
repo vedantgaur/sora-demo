@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sora Director - Video to Playable World</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎬 Sora Director</h1>
+            <p class="subtitle">Autonomous Video-to-Playable World Generator</p>
+            <div class="mode-badge" id="modeBadge">
+                <span class="badge" id="modeLabel">{{ config.mode }} MODE</span>
+                <label class="mode-toggle">
+                    <input type="checkbox" id="modeToggle">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-text">Use Sora</span>
+                </label>
+            </div>
+        </header>
+
+        <!-- Step 1: Generate -->
+        <section class="section">
+            <div class="section-header">
+                <span class="step-number">1</span>
+                <h2>Generate Video Takes</h2>
+            </div>
+            
+            <div class="card">
+                <div class="form-group">
+                    <label for="promptInput">Describe your scene:</label>
+                    <textarea 
+                        id="promptInput" 
+                        class="prompt-input" 
+                        rows="3" 
+                        placeholder="E.g., A robot walks down a futuristic hallway with glowing panels"
+                    ></textarea>
+                    <div class="prompt-hints" id="promptHints"></div>
+                </div>
+                
+                <button id="generateBtn" class="btn btn-primary btn-large">
+                    <span class="btn-text">Show Video</span>
+                    <span class="btn-loader" style="display: none;">Loading...</span>
+                </button>
+            </div>
+
+            <!-- Results Container -->
+            <div id="resultsContainer" class="results-container" style="display: none;">
+                <h3>Generated Video</h3>
+                <div id="results" class="video-grid"></div>
+            </div>
+        </section>
+
+        <!-- Step 2: 3D Viewer & Agent Test -->
+        <section class="section" id="viewerSection" style="display: none;">
+            <div class="section-header">
+                <span class="step-number">2</span>
+                <h2>3D World Viewer</h2>
+            </div>
+            
+            <div class="card">
+                <div id="worldViewer" class="world-viewer">
+                    <canvas id="viewer3D"></canvas>
+                    <div class="viewer-placeholder" id="viewerPlaceholder">
+                        <div class="viewer-icon">🌍</div>
+                        <p>3D World Loaded</p>
+                        <p class="asset-info" id="assetInfo"></p>
+                    </div>
+                    <div class="viewer-loading" id="viewerLoading" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <p class="loading-text">Generating 3D Scene...</p>
+                        <p class="loading-subtext" id="loadingSubtext">Intelligently generating scene...</p>
+                    </div>
+                    <div class="viewer-controls">
+                        <div class="control-hint">🖱️ Left-click: Rotate | Right-click: Pan | Scroll: Zoom</div>
+                    </div>
+                </div>
+                
+                <button id="runAgentBtn" class="btn btn-secondary">
+                    <span class="btn-text">🤖 Run Agent Test</span>
+                    <span class="btn-loader" style="display: none;">⏳ Testing...</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Step 4: Agent Results & Revision -->
+        <section class="section" id="agentResultsSection" style="display: none;">
+            <div class="section-header">
+                <span class="step-number">4</span>
+                <h2>Agent Test Results & Prompt Revision</h2>
+            </div>
+            
+            <div class="card">
+                <!-- Violations -->
+                <div id="violationsContainer" class="violations-container"></div>
+                
+                <!-- Metrics -->
+                <div id="metricsContainer" class="metrics-container"></div>
+                
+                <!-- Revised Prompt -->
+                <div class="revised-prompt-container">
+                    <h3>Revised Prompt</h3>
+                    <div class="prompt-comparison">
+                        <div class="prompt-box">
+                            <h4>Original:</h4>
+                            <p id="originalPrompt"></p>
+                        </div>
+                        <div class="arrow">→</div>
+                        <div class="prompt-box revised">
+                            <h4>Revised:</h4>
+                            <p id="revisedPrompt"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="explanation" id="revisionExplanation"></div>
+                    
+                    <button id="regenerateBtn" class="btn btn-primary btn-large">
+                        🔄 Regenerate with Improved Prompt
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Sora Director v1.0 | Demonstrating agentic feedback loops for world generation</p>
+        </footer>
+    </div>
+
+    <script src="/static/viewer3d.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
+

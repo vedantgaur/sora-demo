@@ -1,0 +1,24 @@
+# Copy this file to .env and add your actual API keys
+# DO NOT commit .env to Git!
+
+# Application Configuration
+FLASK_ENV=development
+FLASK_DEBUG=True
+PORT=5000
+HOST=0.0.0.0
+
+# Mode Configuration
+USE_MOCK=true  # Set to false to use real APIs
+
+# OpenAI API Key (KEEP THIS SECRET!)
+# Get your key at: https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Sora API (when available)
+SORA_API_KEY=your_sora_api_key_here
+SORA_API_URL=https://api.openai.com/v1/sora
+
+# Other settings...
+DATA_ROOT=./data
+LOG_LEVEL=INFO
+NUM_TAKES_PER_GENERATION=3
