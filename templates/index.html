@@ -14,14 +14,6 @@
         <header class="header">
             <h1>🎬 Sora Director</h1>
             <p class="subtitle">Autonomous Video-to-Playable World Generator</p>
-            <div class="mode-badge" id="modeBadge">
-                <span class="badge" id="modeLabel">{{ config.mode }} MODE</span>
-                <label class="mode-toggle">
-                    <input type="checkbox" id="modeToggle">
-                    <span class="toggle-slider"></span>
-                    <span class="toggle-text">Use Sora</span>
-                </label>
-            </div>
         </header>
 
         <!-- Step 1: Generate -->
@@ -35,9 +27,14 @@
                 <div class="form-group">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <label for="promptInput">Describe your scene:</label>
-                        <select id="cachedPromptsDropdown" style="padding: 6px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #a1a1aa; font-size: 13px; cursor: pointer;">
-                            <option value="">Load cached prompt...</option>
-                        </select>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="demoBtn" class="btn btn-secondary" style="padding: 6px 12px; font-size: 13px;">
+                                <span class="btn-text">Quick Demo</span>
+                            </button>
+                            <select id="cachedPromptsDropdown" style="padding: 6px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #a1a1aa; font-size: 13px; cursor: pointer;">
+                                <option value="">Or load cached...</option>
+                            </select>
+                        </div>
                     </div>
                     <textarea 
                         id="promptInput" 
@@ -48,35 +45,9 @@
                     <div class="prompt-hints" id="promptHints"></div>
                 </div>
                 
-                <!-- Mock Mode Video Selector -->
-                <div id="videoSourceSelector" class="form-group" style="display: none;">
-                    <label style="color: #e4e4e7; font-size: 14px; margin-bottom: 8px; display: block;">Test Video Source:</label>
-                    <div style="display: flex; gap: 12px;">
-                        <label class="video-source-option" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                            <input type="radio" name="videoSource" value="demo" checked style="margin-right: 8px;">
-                            <span style="color: #fafafa; font-size: 14px;">Demo (Cube Animation)</span>
-                        </label>
-                        <label class="video-source-option" style="flex: 1; padding: 12px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                            <input type="radio" name="videoSource" value="sora" style="margin-right: 8px;">
-                            <span style="color: #fafafa; font-size: 14px;">Sora Generated</span>
-                        </label>
-                    </div>
-                    <p style="color: #71717a; font-size: 12px; margin-top: 8px;">Choose a video source to test 3D reconstruction</p>
-                </div>
-                
-                <!-- Reconstruction Method Selector -->
-                <div class="form-group">
-                    <label for="reconstructionMethod" style="color: #fafafa; font-size: 14px; font-weight: 500; margin-bottom: 8px; display: block;">3D Reconstruction Method</label>
-                    <select id="reconstructionMethod" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fafafa; font-size: 14px;">
-                        <option value="gpt">GPT-4 Vision (Fast, Code Generation)</option>
-                        <option value="depth">Depth Estimation (POC, Point Cloud)</option>
-                    </select>
-                    <p style="color: #71717a; font-size: 12px; margin-top: 8px;">Depth estimation uses MiDaS for lightweight 3D reconstruction</p>
-                </div>
-                
                 <button id="generateBtn" class="btn btn-primary btn-large">
-                    <span class="btn-text">Show Video</span>
-                    <span class="btn-loader" style="display: none;">Loading...</span>
+                    <span class="btn-text">Generate Video</span>
+                    <span class="btn-loader" style="display: none;">Generating...</span>
                 </button>
             </div>
 
@@ -138,7 +109,17 @@
                     </div>
                 </div>
                 
-                <div style="display: flex; gap: 12px;">
+                <!-- Reconstruction Method Selector -->
+                <div class="form-group" style="margin-top: 16px;">
+                    <label for="reconstructionMethod" style="color: #fafafa; font-size: 14px; font-weight: 500; margin-bottom: 8px; display: block;">3D Reconstruction Method</label>
+                    <select id="reconstructionMethod" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fafafa; font-size: 14px;">
+                        <option value="gpt">GPT-4 Vision (Fast, Code Generation)</option>
+                        <option value="depth">Depth Estimation (POC, Point Cloud)</option>
+                    </select>
+                    <p style="color: #71717a; font-size: 12px; margin-top: 8px;">Select method before regenerating</p>
+                </div>
+                
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
                     <button id="regenerate3DBtn" class="btn btn-secondary" style="flex: 1;">
                         <span class="btn-text">Regenerate 3D Scene</span>
                         <span class="btn-loader" style="display: none;">Generating...</span>

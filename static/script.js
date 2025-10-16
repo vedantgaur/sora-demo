@@ -10,7 +10,8 @@ let selectedVideoPath = null;
 let currentAssetPath = null;
 let currentFrameCount = 3;
 let viewer3D = null;
-let useRealAPI = false;
+// Always use Sora API for new generations (no mock mode toggle)
+let useRealAPI = true;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -25,27 +26,11 @@ document.addEventListener('DOMContentLoaded', () => {
  * Set up all event listeners
  */
 function setupEventListeners() {
-    // Mode toggle
-    document.getElementById('modeToggle').addEventListener('change', handleModeToggle);
-    
     // Generate button
     document.getElementById('generateBtn').addEventListener('click', handleGenerate);
     
-    // Initialize mock mode UI
-    const promptInput = document.getElementById('promptInput');
-    const generateBtn = document.getElementById('generateBtn');
-    const btnText = generateBtn.querySelector('.btn-text');
-    const videoSourceSelector = document.getElementById('videoSourceSelector');
-    
-    if (!useRealAPI) {
-        promptInput.disabled = true;
-        promptInput.style.opacity = '0.5';
-        promptInput.value = 'A ball moving left to right';
-        btnText.textContent = 'Show Video';
-        videoSourceSelector.style.display = 'block';  // Show video selector in mock mode
-    } else {
-        videoSourceSelector.style.display = 'none';  // Hide video selector in real mode
-    }
+    // Demo button
+    document.getElementById('demoBtn').addEventListener('click', handleDemo);
     
     // Run agent button
     document.getElementById('runAgentBtn').addEventListener('click', handleRunAgent);
@@ -58,20 +43,6 @@ function setupEventListeners() {
         document.getElementById('regenerateBtn').addEventListener('click', handleRegenerate);
     }
     
-    // Video source selector (update prompt when changing)
-    document.querySelectorAll('input[name="videoSource"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            if (!useRealAPI) {
-                const promptInput = document.getElementById('promptInput');
-                if (e.target.value === 'sora') {
-                    promptInput.value = 'A man walking through trees';
-                } else {
-                    promptInput.value = 'A ball moving left to right';
-                }
-            }
-        });
-    });
-    
     // Enter key in prompt input
     document.getElementById('promptInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -82,25 +53,45 @@ function setupEventListeners() {
     // Cached prompts dropdown
     const cachedPromptsDropdown = document.getElementById('cachedPromptsDropdown');
     if (cachedPromptsDropdown) {
-        // Load cached prompts
+        // Load cached prompts (includes demo videos)
         loadCachedPrompts();
         
         // Handle selection
-        cachedPromptsDropdown.addEventListener('change', (e) => {
+        cachedPromptsDropdown.addEventListener('change', async (e) => {
             if (e.target.value) {
-                const promptInput = document.getElementById('promptInput');
-                promptInput.value = e.target.value;
+                const selectedOption = cachedPromptsDropdown.options[cachedPromptsDropdown.selectedIndex];
+                const videoPath = selectedOption.dataset.path;
+                const promptHash = selectedOption.dataset.hash;
+                
+                if (videoPath && promptHash) {
+                    // This is a cached/demo video - load it directly
+                    currentPromptHash = promptHash;
+                    currentPrompt = e.target.value;
+                    selectedVideoPath = videoPath;
+                    
+                    displayResults([{
+                        take_id: 1,
+                        video_url: videoPath,
+                        video_path: videoPath,
+                        scores: {
+                            overall: 0.95
+                        },
+                        rank: 1
+                    }]);
+                } else {
+                    // Just a prompt - fill input
+                    document.getElementById('promptInput').value = e.target.value;
+                }
+                
                 // Reset dropdown
                 cachedPromptsDropdown.value = '';
-                // Show success message
-                showError('Cached prompt loaded!', 'warning');
             }
         });
     }
 }
 
 /**
- * Load cached prompts from backend
+ * Load cached prompts from backend (includes demo videos and cached generations)
  */
 async function loadCachedPrompts() {
     try {
@@ -111,22 +102,65 @@ async function loadCachedPrompts() {
         if (!dropdown) return;
         
         // Clear existing options except the first one
-        dropdown.innerHTML = '<option value="">Load cached prompt...</option>';
+        dropdown.innerHTML = '<option value="">Or load cached...</option>';
         
+        // Add demo videos as separate section
+        const demos = [
+            {
+                prompt: 'Demo: Cube Animation',
+                path: '/data/samples/demo.mp4',
+                hash: 'demo_cube',
+                isDemo: true
+            },
+            {
+                prompt: 'Demo: Man Walking Through Trees',
+                path: '/data/generations/796b6b5a7803e5aa/take_1.mp4',
+                hash: '796b6b5a7803e5aa',
+                isDemo: true
+            },
+            {
+                prompt: 'Demo: Catapult Launching',
+                path: '/data/generations/fec980cf43d9b057/take_1.mp4',
+                hash: 'fec980cf43d9b057',
+                isDemo: true
+            }
+        ];
+        
+        // Add demo section
+        demos.forEach(demo => {
+            const option = document.createElement('option');
+            option.value = demo.prompt;
+            option.dataset.path = demo.path;
+            option.dataset.hash = demo.hash;
+            option.textContent = demo.prompt;
+            option.style.color = '#22c55e'; // Green for demos
+            dropdown.appendChild(option);
+        });
+        
+        // Add separator if there are cached prompts
         if (data.prompts && data.prompts.length > 0) {
+            const separator = document.createElement('option');
+            separator.disabled = true;
+            separator.textContent = '──────────';
+            dropdown.appendChild(separator);
+            
+            // Add cached prompts
             data.prompts.forEach(item => {
                 const option = document.createElement('option');
                 option.value = item.prompt;
+                option.dataset.hash = item.hash;
                 // Truncate long prompts for dropdown display
-                const displayText = item.prompt.length > 50 
-                    ? item.prompt.substring(0, 47) + '...' 
+                const displayText = item.prompt.length > 45 
+                    ? item.prompt.substring(0, 42) + '...' 
                     : item.prompt;
                 option.textContent = `${displayText} (${item.mode})`;
                 option.title = item.prompt; // Full text on hover
                 dropdown.appendChild(option);
             });
             
-            console.log(`Loaded ${data.count} cached prompts`);
+            console.log(`Loaded ${demos.length} demos + ${data.count} cached prompts`);
+        } else {
+            console.log(`Loaded ${demos.length} demo videos`);
         }
     } catch (error) {
         console.error('Failed to load cached prompts:', error);
@@ -134,45 +168,29 @@ async function loadCachedPrompts() {
 }
 
 /**
- * Handle mode toggle between mock and real API
+ * Handle quick demo button
  */
-function handleModeToggle(event) {
-    useRealAPI = event.target.checked;
-    const modeLabel = document.getElementById('modeLabel');
-    const promptInput = document.getElementById('promptInput');
-    const generateBtn = document.getElementById('generateBtn');
-    const btnText = generateBtn.querySelector('.btn-text');
-    const videoSourceSelector = document.getElementById('videoSourceSelector');
+async function handleDemo() {
+    // Load the first demo (cube animation)
+    const demoPath = '/data/samples/demo.mp4';
+    const demoPrompt = 'Demo: Cube Animation';
+    const demoHash = 'demo_cube';
     
-    if (useRealAPI) {
-        modeLabel.textContent = 'REAL API MODE';
-        modeLabel.style.background = 'rgba(76, 175, 80, 0.3)';
-        promptInput.disabled = false;
-        promptInput.style.opacity = '1';
-        btnText.textContent = 'Generate Video';
-        videoSourceSelector.style.display = 'none';  // Hide video selector
-        
-        // Warning for real API
-        if (confirm('Warning: Real Sora API mode will make actual API calls.\n\nAre you sure you want to enable this?')) {
-            console.log('Real API mode enabled');
-        } else {
-            event.target.checked = false;
-            useRealAPI = false;
-            modeLabel.textContent = 'MOCK MODE';
-            modeLabel.style.background = '';
-            promptInput.disabled = true;
-            promptInput.style.opacity = '0.5';
-            btnText.textContent = 'Show Video';
-            videoSourceSelector.style.display = 'block';  // Show video selector
-        }
-    } else {
-        modeLabel.textContent = 'MOCK MODE';
-        modeLabel.style.background = '';
-        promptInput.disabled = true;
-        promptInput.style.opacity = '0.5';
-        btnText.textContent = 'Show Video';
-        videoSourceSelector.style.display = 'block';  // Show video selector
-    }
+    currentPromptHash = demoHash;
+    currentPrompt = demoPrompt;
+    selectedVideoPath = demoPath;
+    
+    displayResults([{
+        take_id: 1,
+        video_url: demoPath,
+        video_path: demoPath,
+        scores: {
+            overall: 0.95
+        },
+        rank: 1
+    }]);
+    
+    showError('Demo video loaded - ready for 3D reconstruction!', 'warning');
 }
 
 /**
@@ -286,59 +304,6 @@ async function handleGenerate() {
     
     const prompt = promptInput.value.trim();
     
-    // Mock mode: Just show selected video directly
-    if (!useRealAPI) {
-        setButtonLoading(generateBtn, true);
-        hideSection('viewerSection');
-        hideSection('agentResultsSection');
-        
-        try {
-            // Get selected video source
-            const videoSource = document.querySelector('input[name="videoSource"]:checked')?.value || 'demo';
-            
-            let videoPath, videoPrompt;
-            
-            if (videoSource === 'sora') {
-                // Use the most recent Sora-generated video
-                videoPath = '/data/generations/796b6b5a7803e5aa/take_1.mp4';
-                videoPrompt = 'A man walking through trees';
-                currentPromptHash = '796b6b5a7803e5aa';
-            } else {
-                // Use demo video
-                videoPath = '/data/samples/demo.mp4';
-                videoPrompt = 'A ball moving left to right';
-                currentPromptHash = 'sample';
-            }
-            
-            currentPrompt = videoPrompt;
-            
-            // Add timestamp to bust browser cache
-            const timestamp = Date.now();
-            displayResults([{
-                take_id: currentPromptHash,
-                video_path: videoPath,
-                video_url: `${videoPath}?t=${timestamp}`,
-                rank: 1,
-                scores: {
-                    overall: 0.95,
-                    identity_persistence: 0.95,
-                    motion_smoothness: 0.92,
-                    path_realism: 0.94,
-                    physics_plausibility: 0.93,
-                    visual_quality: 0.96,
-                    temporal_coherence: 0.91
-                }
-            }]);
-        } catch (error) {
-            console.error('Sample video error:', error);
-            showError('Failed to load sample video.');
-        } finally {
-            setButtonLoading(generateBtn, false);
-        }
-        return;
-    }
-    
-    // Real API mode
     if (!prompt) {
         showError('Please enter a prompt');
         return;
@@ -357,12 +322,10 @@ async function handleGenerate() {
     const promptHash = await generatePromptHash(prompt);
     
     try {
-        // Start progress polling in parallel with generation (only for real API)
-        if (useRealAPI) {
-            pollProgress(promptHash).catch(err => {
-                console.warn('Progress polling ended:', err.message);
-            });
-        }
+        // Start progress polling in parallel with generation
+        pollProgress(promptHash).catch(err => {
+            console.warn('Progress polling ended:', err.message);
+        });
         
         const response = await fetch('/api/generate', {
             method: 'POST',
@@ -372,7 +335,7 @@ async function handleGenerate() {
             body: JSON.stringify({ 
                 prompt, 
                 num_takes: 1,  // Always generate 1 video
-                use_real_api: useRealAPI 
+                use_real_api: true  // Always use real Sora API
             })
         });
         

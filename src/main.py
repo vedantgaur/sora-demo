@@ -684,6 +684,7 @@ CRITICAL REQUIREMENTS:
 3. Separate STATIC objects (environment) from ANIMATED objects (moving entities)
 4. Support ANY object: vehicles (composite geometries), catapults (Box+Cylinder), creatures (articulated groups), buildings, etc.
 5. Match real-world scale: humans ~1.8 units, trees 3-8 units, vehicles 2-4 units
+6. **REALISTIC PHYSICS**: Apply gravity to projectiles (balls, thrown objects), use arcing parabolic trajectories NOT straight lines, include natural motion (walking bob, vehicle suspension)
 
 Your response must be ONLY valid JSON in this exact format:
 {
@@ -747,10 +748,22 @@ function updateFunction(time) {
   body.position.y = 0.75;
   person.add(body);
   
-  // ANIMATE: smooth walking motion
+  // ANIMATE: smooth walking motion with slight vertical bob
   person.position.x = -10 + (time * 1.5) % 20;  // Walk across scene
+  person.position.y = 0.05 * Math.sin(time * 5);  // Natural walking bob
   person.position.z = 0;
   animatedObjects.push(person);
+  
+  // EXAMPLE: Ball with realistic parabolic arc (if applicable)
+  // const ball = new THREE.Mesh(
+  //   new THREE.SphereGeometry(0.3),
+  //   new THREE.MeshStandardMaterial({ color: 0xff0000 })
+  // );
+  // const t = (time * 2) % 3;  // 3 second cycle
+  // ball.position.x = -5 + t * 3.33;  // Horizontal motion (left to right)
+  // ball.position.y = 1.5 + (t * 2) - (4.9 * t * t);  // Parabolic arc with gravity (y = v*t - 0.5*g*t^2)
+  // ball.position.z = 0;
+  // animatedObjects.push(ball);
   
   return animatedObjects;
 }
